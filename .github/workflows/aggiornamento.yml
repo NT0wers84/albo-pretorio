@@ -1,0 +1,70 @@
+name: Test Scraper Albo Pretorio
+
+on:
+  # Avvio manuale dalla tab "Actions" di GitHub
+  workflow_dispatch:
+
+  # In futuro: automatico ogni giorno alle 08:00 ora italiana (06:00 UTC)
+  # schedule:
+  #   - cron: '0 6 * * *'
+
+jobs:
+  scraper:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Scarica il codice dal repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Installa dipendenze di sistema (Tesseract OCR + Poppler per PDF)
+      - name: Installa Tesseract e Poppler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ita poppler-utils
+
+      # 3. Configura Python
+      - name: Configura Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 4. Installa dipendenze Python
+      - name: Installa dipendenze Python
+        run: pip install -r requirements.txt
+
+      # 5. Esegui lo scraper
+      - name: Esegui scraper
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/scraper.py
+
+      # 6. Mostra i risultati nel log (utile per il debug)
+      - name: Mostra nuovi atti trovati
+        run: |
+          echo "=== NUOVI ATTI TROVATI ==="
+          cat data/nuovi_atti.json || echo "(file non trovato)"
+          echo ""
+          echo "=== STATISTICHE ==="
+          python -c "
+          import json, os
+          f = 'data/nuovi_atti.json'
+          if os.path.exists(f):
+              atti = json.load(open(f))
+              print(f'Atti nuovi: {len(atti)}')
+              for a in atti[:5]:
+                  print(f'  - [{a.get(\"tipo\",\"?\")}] {a.get(\"oggetto\",\"?\")[:60]}')
+          else:
+              print('Nessun file di output trovato.')
+          "
+
+      # 7. Salva i risultati nel repository
+      - name: Salva risultati nel repository
+        run: |
+          git config user.name "AlboPretorioBot"
+          git config user.email "bot@albo-pretorio.local"
+          git add data/
+          git diff --staged --quiet || git commit -m "Aggiornamento albo: $(date '+%Y-%m-%d')"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
