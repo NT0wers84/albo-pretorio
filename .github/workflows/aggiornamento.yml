@@ -8,6 +8,9 @@ on:
   # schedule:
   #   - cron: '0 6 * * *'
 
+permissions:
+  contents: write
+
 jobs:
   scraper:
     runs-on: ubuntu-latest
@@ -63,6 +66,11 @@ jobs:
         run: |
           git config user.name "AlboPretorioBot"
           git config user.email "bot@albo-pretorio.local"
+          git add data/
+          git diff --staged --quiet || git commit -m "Aggiornamento albo: $(date '+%Y-%m-%d')"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}          git config user.email "bot@albo-pretorio.local"
           git add data/
           git diff --staged --quiet || git commit -m "Aggiornamento albo: $(date '+%Y-%m-%d')"
           git push
