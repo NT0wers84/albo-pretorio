@@ -113,6 +113,15 @@ def scrape_lista_atti() -> list[dict]:
         tabella = soup.find("table")
         if not tabella:
             log.warning(f"Nessuna tabella trovata a pagina {pagina}. Fine elenco.")
+            # DEBUG: stampa i primi 3000 caratteri dell'HTML per capire la struttura
+            log.warning("=== DEBUG HTML (prime 3000 caratteri) ===")
+            log.warning(resp.text[:3000])
+            log.warning("=== TUTTI I TAG DIV CON CLASSE ===")
+            for div in soup.find_all("div", class_=True)[:20]:
+                log.warning(f"  <div class='{' '.join(div.get('class', []))}'>")
+            log.warning("=== TUTTI I TAG TABLE ===")
+            for t in soup.find_all(["table", "tbody", "tr"])[:10]:
+                log.warning(f"  <{t.name} class='{t.get('class', '')}'>")
             break
 
         # Intestazioni per mappare le colonne
