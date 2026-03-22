@@ -100,33 +100,52 @@ def _fetch_con_js(url: str, attendi_selettore: str = "table", timeout_ms: int = 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         pagina = browser.new_page()
+        pagina.set_viewport_size({"width": 1280, "height": 900})
         pagina.set_extra_http_headers({
-            "User-Agent": SESSION.headers["User-Agent"],
             "Accept-Language": "it-IT,it;q=0.9",
         })
-        pagina.goto(url, wait_until="domcontentloaded", timeout=30000)
+        pagina.goto(url, wait_until="networkidle", timeout=30000)
 
         # Attende che la tabella (o altro selettore) sia visibile
         try:
             pagina.wait_for_selector(attendi_selettore, timeout=timeout_ms)
             log.info(f"  Selettore '{attendi_selettore}' trovato dopo il rendering JS")
         except PWTimeout:
-            log.warning(f"  Timeout: selettore '{attendi_selettore}' non trovato. "
-                        f"Prendo l'HTML com'è.")
+            log.warning(f"  Timeout: selettore '{attendi_selettore}' non trovato.")
+
+        # Screenshot per debug visivo
+        screenshot_path = Path("data") / "debug_screenshot.png"
+        screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+        pagina.screenshot(path=str(screenshot_path), full_page=True)
+        log.info(f"  Screenshot salvato: {screenshot_path}")
 
         html = pagina.content()
 
-        # DEBUG: stampa i div principali del contenuto per capire la struttura
-        log.info("=== STRUTTURA PORTLET DOPO JS ===")
+        # DEBUG: tutto il testo visibile nella pagina
+        testo_pagina = pagina.inner_text("body")
+        log.info(f"=== TESTO VISIBILE NELLA PAGINA ({len(testo_pagina)} char) ===")
+        log.info(testo_pagina[:3000])
+
+        # DEBUG: tutti i link nella pagina
+        log.info("=== LINK NELLA PAGINA ===")
+        links = pagina.query_selector_all("a[href]")
+        for link in links[:30]:
+            href = link.get_attribute("href") or ""
+            testo = link.inner_text().strip()
+            if testo and len(testo) > 2:
+                log.info(f"  [{testo[:60]}] → {href[:120]}")
+
+        # DEBUG: tutti gli iframe (il contenuto potrebbe essere in un iframe)
+        iframes = pagina.query_selector_all("iframe")
+        log.info(f"=== IFRAME TROVATI: {len(iframes)} ===")
+        for iframe in iframes[:5]:
+            src = iframe.get_attribute("src") or ""
+            log.info(f"  <iframe src='{src[:200]}'>")
+
+        # DEBUG: struttura HTML del body
         soup_debug = BeautifulSoup(html, "html.parser")
-        for div in soup_debug.find_all("div", class_=True)[:30]:
-            cls = " ".join(div.get("class", []))
-            if any(kw in cls for kw in ["portlet", "atti", "albo", "content", "list", "row"]):
-                log.info(f"  <div class='{cls}'>")
         tabelle = soup_debug.find_all("table")
-        log.info(f"=== TABELLE TROVATE DOPO JS: {len(tabelle)} ===")
-        for t in tabelle[:5]:
-            log.info(f"  <table class='{t.get('class', '')}'>")
+        log.info(f"=== TABELLE HTML: {len(tabelle)} ===")
 
         browser.close()
     return html
