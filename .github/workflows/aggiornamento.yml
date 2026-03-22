@@ -36,10 +36,27 @@ jobs:
       - name: Installa dipendenze Python
         run: pip install -r requirements.txt
 
-      # 4b. Installa browser Chromium per Playwright
-      - name: Installa browser Playwright
-        run: python -m playwright install chromium --with-deps
+      # 5. Esegui lo scraper
+      - name: Esegui scraper
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/scraper.py
 
-      # 5. DEBUG: prova tutti gli endpoint JCityGov
-      - name: Debug endpoint URLs
-        run: python scripts/debug_urls.py
+      # 6. Mostra i risultati nel log
+      - name: Mostra nuovi atti trovati
+        run: |
+          echo "=== NUOVI ATTI TROVATI ==="
+          cat data/nuovi_atti.json || echo "(file non trovato)"
+          echo "=== STATISTICHE ==="
+          python scripts/mostra_risultati.py
+
+      # 7. Salva i risultati nel repository
+      - name: Salva risultati nel repository
+        run: |
+          git config user.name "AlboPretorioBot"
+          git config user.email "bot@albo-pretorio.local"
+          git add data/
+          git diff --staged --quiet || git commit -m "Aggiornamento albo: $(date '+%Y-%m-%d')"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

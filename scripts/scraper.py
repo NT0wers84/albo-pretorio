@@ -34,10 +34,9 @@ log = logging.getLogger(__name__)
 
 # ── Costanti ──────────────────────────────────────────────────────────────────
 BASE_URL = "https://pieveemanuele.trasparenza-valutazione-merito.it"
-ALBO_URL = f"{BASE_URL}/web/trasparenza/dettaglio-albo-pretorio"
-
-# ID portlet Liferay dell'albo pubblicazioni
-PORTLET_ID = "jcitygovalbopubblicazioni_WAR_jcitygovalbiportlet"
+# URL corretto: il sito usa il modulo PAPCA (non dettaglio-albo-pretorio)
+# Confermato dal test debug: restituisce tabella HTML statica, nessun JS necessario
+ALBO_URL = f"{BASE_URL}/web/trasparenza/papca-ap/-/papca/igrid/0/Albo_pretorio/"
 
 # Percorsi file
 DATA_DIR       = Path("data")
@@ -84,71 +83,11 @@ SESSION.headers.update({
 })
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PLAYWRIGHT — rendering JavaScript
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _fetch_con_js(url: str, attendi_selettore: str = "table", timeout_ms: int = 20000) -> str:
-    """
-    Carica una pagina con Playwright (browser headless Chromium) e restituisce
-    l'HTML completo dopo che il JavaScript ha renderizzato il contenuto.
-    Attende che compaia il selettore CSS indicato prima di estrarre l'HTML.
-    """
-    from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-
-    log.info(f"Carico con Playwright (JS): {url}")
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
-        pagina = browser.new_page()
-        pagina.set_viewport_size({"width": 1280, "height": 900})
-        pagina.set_extra_http_headers({
-            "Accept-Language": "it-IT,it;q=0.9",
-        })
-        pagina.goto(url, wait_until="networkidle", timeout=30000)
-
-        # Attende che la tabella (o altro selettore) sia visibile
-        try:
-            pagina.wait_for_selector(attendi_selettore, timeout=timeout_ms)
-            log.info(f"  Selettore '{attendi_selettore}' trovato dopo il rendering JS")
-        except PWTimeout:
-            log.warning(f"  Timeout: selettore '{attendi_selettore}' non trovato.")
-
-        # Screenshot per debug visivo
-        screenshot_path = Path("data") / "debug_screenshot.png"
-        screenshot_path.parent.mkdir(parents=True, exist_ok=True)
-        pagina.screenshot(path=str(screenshot_path), full_page=True)
-        log.info(f"  Screenshot salvato: {screenshot_path}")
-
-        html = pagina.content()
-
-        # DEBUG: tutto il testo visibile nella pagina
-        testo_pagina = pagina.inner_text("body")
-        log.info(f"=== TESTO VISIBILE NELLA PAGINA ({len(testo_pagina)} char) ===")
-        log.info(testo_pagina[:3000])
-
-        # DEBUG: tutti i link nella pagina
-        log.info("=== LINK NELLA PAGINA ===")
-        links = pagina.query_selector_all("a[href]")
-        for link in links[:30]:
-            href = link.get_attribute("href") or ""
-            testo = link.inner_text().strip()
-            if testo and len(testo) > 2:
-                log.info(f"  [{testo[:60]}] → {href[:120]}")
-
-        # DEBUG: tutti gli iframe (il contenuto potrebbe essere in un iframe)
-        iframes = pagina.query_selector_all("iframe")
-        log.info(f"=== IFRAME TROVATI: {len(iframes)} ===")
-        for iframe in iframes[:5]:
-            src = iframe.get_attribute("src") or ""
-            log.info(f"  <iframe src='{src[:200]}'>")
-
-        # DEBUG: struttura HTML del body
-        soup_debug = BeautifulSoup(html, "html.parser")
-        tabelle = soup_debug.find_all("table")
-        log.info(f"=== TABELLE HTML: {len(tabelle)} ===")
-
-        browser.close()
-    return html
+def _fetch(url: str) -> str:
+    """Scarica una pagina con requests (nessun JS necessario per PAPCA)."""
+    resp = SESSION.get(url, timeout=30)
+    resp.raise_for_status()
+    return resp.text
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -167,11 +106,10 @@ def scrape_lista_atti() -> list[dict]:
     while url_corrente:
         log.info(f"Scarico pagina {pagina}: {url_corrente}")
 
-        # Usa Playwright per eseguire il JavaScript della pagina
         try:
-            html = _fetch_con_js(url_corrente)
-        except Exception as e:
-            log.error(f"Errore Playwright sulla pagina {pagina}: {e}")
+            html = _fetch(url_corrente)
+        except requests.RequestException as e:
+            log.error(f"Errore HTTP sulla pagina {pagina}: {e}")
             break
 
         soup = BeautifulSoup(html, "html.parser")
@@ -388,8 +326,8 @@ def elabora_atto(atto: dict) -> dict:
     log.info(f"Elaboro: {atto['oggetto'][:60]}...")
 
     try:
-        html_dettaglio = _fetch_con_js(atto["url_dettaglio"], attendi_selettore="a[href*='pdf'], a[href*='download'], .allegati", timeout_ms=10000)
-    except Exception as e:
+        html_dettaglio = _fetch(atto["url_dettaglio"])
+    except requests.RequestException as e:
         log.error(f"Errore accesso dettaglio: {e}")
         return atto
 
