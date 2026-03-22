@@ -49,28 +49,13 @@ jobs:
           cat data/nuovi_atti.json || echo "(file non trovato)"
           echo ""
           echo "=== STATISTICHE ==="
-          python -c "
-          import json, os
-          f = 'data/nuovi_atti.json'
-          if os.path.exists(f):
-              atti = json.load(open(f))
-              print(f'Atti nuovi: {len(atti)}')
-              for a in atti[:5]:
-                  print(f'  - [{a.get(\"tipo\",\"?\")}] {a.get(\"oggetto\",\"?\")[:60]}')
-          else:
-              print('Nessun file di output trovato.')
-          "
+          python scripts/mostra_risultati.py
 
       # 7. Salva i risultati nel repository
       - name: Salva risultati nel repository
         run: |
           git config user.name "AlboPretorioBot"
           git config user.email "bot@albo-pretorio.local"
-          git add data/
-          git diff --staged --quiet || git commit -m "Aggiornamento albo: $(date '+%Y-%m-%d')"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}          git config user.email "bot@albo-pretorio.local"
           git add data/
           git diff --staged --quiet || git commit -m "Aggiornamento albo: $(date '+%Y-%m-%d')"
           git push
