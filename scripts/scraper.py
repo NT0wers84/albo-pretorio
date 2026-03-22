@@ -8,7 +8,6 @@ import os
 import re
 import json
 import time
-import hashlib
 import logging
 import requests
 import anthropic
@@ -75,14 +74,62 @@ OGGETTI_ESCLUSI = [
     "rettifica cognome",
 ]
 
-# ── Sessione HTTP ─────────────────────────────────────────────────────────────
+# ── Sessione HTTP (per download PDF e risorse statiche) ───────────────────────
 SESSION = requests.Session()
 SESSION.headers.update({
     "User-Agent": (
         "Mozilla/5.0 (compatible; AlboPretorioBot/1.0; "
-        "+https://github.com/TUO_USERNAME/albo-pretorio)"
+        "+https://github.com/NT0wers84/albo-pretorio)"
     )
 })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLAYWRIGHT — rendering JavaScript
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fetch_con_js(url: str, attendi_selettore: str = "table", timeout_ms: int = 20000) -> str:
+    """
+    Carica una pagina con Playwright (browser headless Chromium) e restituisce
+    l'HTML completo dopo che il JavaScript ha renderizzato il contenuto.
+    Attende che compaia il selettore CSS indicato prima di estrarre l'HTML.
+    """
+    from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+
+    log.info(f"Carico con Playwright (JS): {url}")
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        pagina = browser.new_page()
+        pagina.set_extra_http_headers({
+            "User-Agent": SESSION.headers["User-Agent"],
+            "Accept-Language": "it-IT,it;q=0.9",
+        })
+        pagina.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+        # Attende che la tabella (o altro selettore) sia visibile
+        try:
+            pagina.wait_for_selector(attendi_selettore, timeout=timeout_ms)
+            log.info(f"  Selettore '{attendi_selettore}' trovato dopo il rendering JS")
+        except PWTimeout:
+            log.warning(f"  Timeout: selettore '{attendi_selettore}' non trovato. "
+                        f"Prendo l'HTML com'è.")
+
+        html = pagina.content()
+
+        # DEBUG: stampa i div principali del contenuto per capire la struttura
+        log.info("=== STRUTTURA PORTLET DOPO JS ===")
+        soup_debug = BeautifulSoup(html, "html.parser")
+        for div in soup_debug.find_all("div", class_=True)[:30]:
+            cls = " ".join(div.get("class", []))
+            if any(kw in cls for kw in ["portlet", "atti", "albo", "content", "list", "row"]):
+                log.info(f"  <div class='{cls}'>")
+        tabelle = soup_debug.find_all("table")
+        log.info(f"=== TABELLE TROVATE DOPO JS: {len(tabelle)} ===")
+        for t in tabelle[:5]:
+            log.info(f"  <table class='{t.get('class', '')}'>")
+
+        browser.close()
+    return html
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -100,28 +147,20 @@ def scrape_lista_atti() -> list[dict]:
 
     while url_corrente:
         log.info(f"Scarico pagina {pagina}: {url_corrente}")
+
+        # Usa Playwright per eseguire il JavaScript della pagina
         try:
-            resp = SESSION.get(url_corrente, timeout=30)
-            resp.raise_for_status()
-        except requests.RequestException as e:
-            log.error(f"Errore HTTP sulla pagina {pagina}: {e}")
+            html = _fetch_con_js(url_corrente)
+        except Exception as e:
+            log.error(f"Errore Playwright sulla pagina {pagina}: {e}")
             break
 
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(html, "html.parser")
 
-        # Cerca la tabella degli atti (prima tabella nella pagina)
+        # Cerca la tabella degli atti
         tabella = soup.find("table")
         if not tabella:
-            log.warning(f"Nessuna tabella trovata a pagina {pagina}. Fine elenco.")
-            # DEBUG: stampa i primi 3000 caratteri dell'HTML per capire la struttura
-            log.warning("=== DEBUG HTML (prime 3000 caratteri) ===")
-            log.warning(resp.text[:3000])
-            log.warning("=== TUTTI I TAG DIV CON CLASSE ===")
-            for div in soup.find_all("div", class_=True)[:20]:
-                log.warning(f"  <div class='{' '.join(div.get('class', []))}'>")
-            log.warning("=== TUTTI I TAG TABLE ===")
-            for t in soup.find_all(["table", "tbody", "tr"])[:10]:
-                log.warning(f"  <{t.name} class='{t.get('class', '')}'>")
+            log.warning(f"Nessuna tabella trovata a pagina {pagina} anche dopo JS. Fine elenco.")
             break
 
         # Intestazioni per mappare le colonne
@@ -330,13 +369,12 @@ def elabora_atto(atto: dict) -> dict:
     log.info(f"Elaboro: {atto['oggetto'][:60]}...")
 
     try:
-        resp = SESSION.get(atto["url_dettaglio"], timeout=30)
-        resp.raise_for_status()
-    except requests.RequestException as e:
+        html_dettaglio = _fetch_con_js(atto["url_dettaglio"], attendi_selettore="a[href*='pdf'], a[href*='download'], .allegati", timeout_ms=10000)
+    except Exception as e:
         log.error(f"Errore accesso dettaglio: {e}")
         return atto
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(html_dettaglio, "html.parser")
 
     # ── Metadati aggiuntivi dalla pagina di dettaglio ────────────────────────
     atto["numero"]    = _estrai_numero(atto.get("numero_raw", ""))

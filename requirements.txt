@@ -5,3 +5,4 @@ anthropic==0.40.0
 pdfplumber==0.11.4
 pdf2image==1.17.0
 pytesseract==0.3.13
+playwright==1.44.0
