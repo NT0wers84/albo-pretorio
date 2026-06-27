@@ -10,7 +10,7 @@ import json
 import time
 import logging
 import requests
-import anthropic
+from groq import Groq
 import pdfplumber
 from pathlib import Path
 from datetime import date, datetime
@@ -501,12 +501,12 @@ def _ocr_pdf(percorso: Path) -> str:
 
 def genera_riassunto(atto: dict) -> str:
     """
-    Genera un riassunto in linguaggio semplice dell'atto usando Claude Haiku.
-    Usa il testo dei PDF allegati + i metadati dell'atto.
+    Genera un riassunto in linguaggio semplice dell'atto usando Groq (Llama 3.3 70B).
+    Completamente gratuito. Usa il testo dei PDF allegati + i metadati dell'atto.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        log.warning("ANTHROPIC_API_KEY non impostata, salto riassunto.")
+        log.warning("GROQ_API_KEY non impostata, salto riassunto.")
         return ""
 
     tipo    = atto.get("tipo", "Atto")
@@ -515,8 +515,8 @@ def genera_riassunto(atto: dict) -> str:
     oggetto = atto.get("oggetto", "")
     testo   = atto.get("testo_combinato", "")
 
-    # Tronca il testo se troppo lungo (limite ~50.000 caratteri per Haiku)
-    testo_troncato = testo[:50000] if len(testo) > 50000 else testo
+    # Tronca il testo se troppo lungo (Llama 3.3 supporta ~32k token)
+    testo_troncato = testo[:40000] if len(testo) > 40000 else testo
 
     prompt = f"""Sei un assistente che aiuta i cittadini del Comune di Pieve Emanuele (MI) a capire gli atti amministrativi pubblici.
 
@@ -531,17 +531,17 @@ Spiega: di cosa si tratta, cosa cambia per i cittadini, quali importi o decision
 Usa un tono neutro e informativo. Inizia direttamente con il riassunto, senza intestazioni."""
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        messaggio = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        client = Groq(api_key=api_key)
+        risposta = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}]
         )
-        riassunto = messaggio.content[0].text.strip()
+        riassunto = risposta.choices[0].message.content.strip()
         log.info(f"  ✓ Riassunto generato ({len(riassunto)} char)")
         return riassunto
     except Exception as e:
-        log.error(f"  Errore Claude API: {e}")
+        log.error(f"  Errore Groq API: {e}")
         return ""
 
 

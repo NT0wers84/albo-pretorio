@@ -39,7 +39,7 @@ jobs:
       # 5. Esegui lo scraper
       - name: Esegui scraper
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python scripts/scraper.py
 
       # 6. Mostra i risultati nel log
