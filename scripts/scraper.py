@@ -394,9 +394,10 @@ def elabora_atto(atto: dict) -> dict:
     atto["cartella_locale"] = str(cartella_atto)
 
     # ── Link agli allegati PDF ───────────────────────────────────────────────
-    tutti_link = soup.find_all("a", href=True)
-    log.debug(f"  Link totali nella pagina dettaglio: {len(tutti_link)}")
-    link_pdf = _trova_link_pdf(soup)
+    # La pagina di dettaglio carica gli allegati via JavaScript (Liferay portlet),
+    # quindi requests non li vede nell'HTML statico.
+    # Usiamo direttamente l'endpoint recuperaDettaglio con l'ID atto dall'URL.
+    link_pdf = _trova_link_pdf_da_endpoint(atto["url_dettaglio"], soup)
     log.info(f"  → {len(link_pdf)} allegati PDF trovati")
 
     atto["allegati"] = []
@@ -422,6 +423,92 @@ def elabora_atto(atto: dict) -> dict:
 
     atto["testo_combinato"] = "\n\n---\n\n".join(testi_pdf)
     return atto
+
+
+def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup) -> list[str]:
+    """
+    Strategia principale: usa l'endpoint Liferay recuperaDettaglio per ottenere
+    la lista degli allegati senza dipendere da JavaScript.
+
+    L'URL di dettaglio ha la forma:
+      /papca/display/5473610?p_auth=XXX&p_p_state=pop_up
+    L'ID atto (5473610) serve per costruire l'URL dell'endpoint resource:
+      /papca-ap?p_p_id=...&p_p_lifecycle=2&p_p_resource_id=recuperaDettaglio&...&_..._id=5473610
+
+    Se non trova nulla, fallback sulla ricerca nell'HTML statico.
+    """
+    # Estrai ID atto dall'URL dettaglio (numero dopo /display/)
+    id_match = re.search(r"/display/(\d+)", url_dettaglio)
+    if not id_match:
+        log.debug("  ID atto non trovato nell'URL dettaglio, uso fallback HTML")
+        return _trova_link_pdf(soup_fallback)
+
+    id_atto = id_match.group(1)
+    # Estrai p_auth dall'URL (token di sessione Liferay)
+    auth_match = re.search(r"p_auth=([^&]+)", url_dettaglio)
+    p_auth = auth_match.group(1) if auth_match else ""
+
+    PORTLET = "jcitygovalbopubblicazioni_WAR_jcitygovalbiportlet"
+    P = f"_{PORTLET}_"
+
+    # Endpoint 1: recuperaDettaglio — restituisce HTML della scheda atto con link allegati
+    url_endpoint = (
+        f"{BASE_URL}/web/trasparenza/papca-ap"
+        f"?p_p_id={PORTLET}"
+        f"&p_p_lifecycle=2"
+        f"&p_p_state=pop_up"
+        f"&p_p_mode=view"
+        f"&p_p_resource_id=recuperaDettaglio"
+        f"&p_p_cacheability=cacheLevelPage"
+        f"&p_auth={p_auth}"
+        f"&{P}id={id_atto}"
+        f"&{P}action=mostraDettaglio"
+        f"&{P}fromAction=recuperaDettaglio"
+    )
+
+    try:
+        resp = SESSION.get(url_endpoint, timeout=30)
+        if resp.status_code == 200 and len(resp.text) > 200:
+            soup2 = BeautifulSoup(resp.text, "html.parser")
+            links = _trova_link_pdf(soup2)
+            if links:
+                log.debug(f"  Trovati {len(links)} PDF via endpoint recuperaDettaglio")
+                return links
+            # Cerca anche pattern downloadAllegato direttamente nel testo
+            ids_allegati = re.findall(r"[_&]id=(\d+).*?downloadAllegato|downloadAllegato.*?[_&]id=(\d+)", resp.text)
+            if not ids_allegati:
+                # Cerca pattern più semplice: id= nei link download
+                ids_allegati = re.findall(r"downloadAllegato[^\"']*[_&]id=(\d+)", resp.text)
+            urls = []
+            for id_all in ids_allegati:
+                id_val = id_all if isinstance(id_all, str) else (id_all[0] or id_all[1])
+                if id_val:
+                    url_pdf = (
+                        f"{BASE_URL}/web/trasparenza/papca-ap"
+                        f"?p_p_id={PORTLET}"
+                        f"&p_p_lifecycle=2"
+                        f"&p_p_state=pop_up"
+                        f"&p_p_mode=view"
+                        f"&p_p_resource_id=downloadAllegato"
+                        f"&p_p_cacheability=cacheLevelPage"
+                        f"&{P}downloadSigned=false"
+                        f"&{P}id={id_val}"
+                        f"&{P}action=mostraDettaglio"
+                        f"&{P}fromAction=recuperaDettaglio"
+                    )
+                    if url_pdf not in urls:
+                        urls.append(url_pdf)
+            if urls:
+                log.debug(f"  Trovati {len(urls)} PDF via ID allegato in endpoint")
+                return urls
+    except Exception as e:
+        log.warning(f"  Endpoint recuperaDettaglio fallito: {e}")
+
+    # Fallback: cerca nell'HTML statico già scaricato
+    links = _trova_link_pdf(soup_fallback)
+    if not links:
+        log.debug("  Nessun PDF trovato né via endpoint né via HTML statico")
+    return links
 
 
 def _trova_link_pdf(soup: BeautifulSoup) -> list[str]:
