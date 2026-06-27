@@ -44,44 +44,39 @@ def tipo_breve(tipo_raw: str) -> str:
     return tipo_raw.strip().title()
 
 
-def js_escape(s: str) -> str:
-    """
-    Escapa una stringa per inserirla dentro JSON come valore di stringa JS
-    già dentro una stringa JSON (doppio escape).
-    Nel bundle il template è una stringa JSON, quindi:
-      - ' diventa \'
-      - \ diventa \\
-      - newline diventa \\n (letterale)
-    """
-    s = s.replace("\\", "\\\\")
-    s = s.replace("'", "\\'")
-    s = s.replace("\n", " ").replace("\r", "")
-    return s
-
-
 def atti_to_js_block(atti: list[dict]) -> str:
     """
-    Converte la lista degli atti nel blocco JS escaped atteso dal bundle.
-    Formato output (ogni riga è escaped per stare dentro JSON):
-      ALL_ATTI = [\\n    { tipo: '...', ... },\\n  ];
+    Converte la lista degli atti nel blocco JS atteso dal bundle.
+
+    Il bundle contiene il template come stringa JSON-escaped, quindi
+    i newline reali sono \\n e le virgolette sono escaped.
+    Usiamo json.dumps() per ogni valore stringa: produce escape sicuri
+    (es. l'apostrofo rimane apostrofo, le virgolette diventano \\").
+    Poi rimuoviamo le virgolette esterne di json.dumps e usiamo
+    virgolette doppie come delimitatori JS — compatibili con JSON.
     """
+    def jv(s: str) -> str:
+        """Serializza un valore stringa come letterale JS con virgolette doppie."""
+        # json.dumps produce "stringa" con escape corretti per tutti i caratteri
+        return json.dumps(str(s) if s else "", ensure_ascii=False)
+
     righe = []
     for a in atti:
-        tipo      = js_escape(tipo_breve(a.get("tipo", "Atto")))
-        tipo_norm = js_escape(a.get("tipo_norm", ""))
-        numero    = js_escape(a.get("numero_raw", ""))
-        data      = js_escape(fmt_data(a.get("data_inizio", "")))
-        dk        = js_escape(a.get("data_inizio", "")[:10])
-        oggetto   = js_escape(a.get("oggetto", "")[:200])
-        riassunto = js_escape(a.get("riassunto", "")[:400])
-        url       = js_escape(a.get("url_dettaglio", "") or "")
+        tipo      = jv(tipo_breve(a.get("tipo", "Atto")))
+        tipo_norm = jv(a.get("tipo_norm", ""))
+        numero    = jv(a.get("numero_raw", ""))
+        data      = jv(fmt_data(a.get("data_inizio", "")))
+        dk        = jv((a.get("data_inizio", "") or "")[:10])
+        oggetto   = jv((a.get("oggetto", "") or "")[:200])
+        riassunto = jv((a.get("riassunto", "") or "")[:400])
+        url       = jv(a.get("url_dettaglio", "") or "")
 
         riga = (
-            f"    {{ tipo: '{tipo}', tipoNorm: '{tipo_norm}', "
-            f"numero: '{numero}', data: '{data}', dk: '{dk}',\\n"
-            f"      oggetto: '{oggetto}',\\n"
-            f"      riassunto: '{riassunto}',\\n"
-            f"      url: '{url}' }}"
+            f"    {{ tipo: {tipo}, tipoNorm: {tipo_norm}, "
+            f"numero: {numero}, data: {data}, dk: {dk},\\n"
+            f"      oggetto: {oggetto},\\n"
+            f"      riassunto: {riassunto},\\n"
+            f"      url: {url} }}"
         )
         righe.append(riga)
 
