@@ -55,9 +55,9 @@ jobs:
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: python scripts/publisher_telegram.py
 
-      # 8. Genera il sito statico
-      - name: Genera sito GitHub Pages
-        run: python scripts/genera_sito.py
+      # 8. Aggiorna il sito standalone con i dati freschi
+      - name: Aggiorna sito GitHub Pages
+        run: python scripts/aggiorna_standalone.py
 
       # 9. Salva tutto nel repository (dati + sito)
       - name: Salva risultati nel repository
