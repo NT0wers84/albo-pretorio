@@ -287,21 +287,57 @@ def applica_filtri(atti: list[dict]) -> list[dict]:
 # 3. DEDUPLICAZIONE (solo atti nuovi rispetto all'archivio)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def deduplica_lista(atti: list[dict]) -> list[dict]:
+    """
+    Rimuove i duplicati dalla lista degli atti scrappati.
+    Il portale PAPCA pubblica lo stesso atto due volte con URL diversi:
+    una riga con data_fine=2031-12-31 (pubblicazione permanente)
+    e una con la data di scadenza effettiva.
+    Teniamo quella con la data_fine più recente (≤ oggi + qualche anno),
+    identificando i duplicati tramite (numero_raw, oggetto).
+    """
+    visti: dict[tuple, dict] = {}
+    for atto in atti:
+        chiave = (atto.get("numero_raw", ""), atto.get("oggetto", ""))
+        if chiave not in visti:
+            visti[chiave] = atto
+        else:
+            # Tieni quello con data_fine più utile (non 2031-12-31)
+            esistente = visti[chiave]
+            fine_nuova    = atto.get("data_fine") or ""
+            fine_esistente = esistente.get("data_fine") or ""
+            # Preferisci la data fine < 2030 (data reale vs placeholder)
+            if fine_esistente > "2030" and fine_nuova < "2030":
+                visti[chiave] = atto
+
+    risultato = list(visti.values())
+    if len(risultato) < len(atti):
+        log.info(f"Deduplicati {len(atti) - len(risultato)} atti doppi dal portale")
+    return risultato
+
+
 def filtra_nuovi(atti: list[dict]) -> list[dict]:
     """
     Restituisce solo gli atti non ancora presenti in data/atti.json.
-    Usa l'URL del dettaglio come identificatore univoco.
+    Usa (numero_raw, oggetto) come identificatore univoco (più robusto dell'URL
+    che cambia ad ogni sessione per via del token p_auth).
     """
-    atti_noti = set()
+    atti_noti: set[tuple] = set()
     if ATTI_JSON.exists():
         try:
             with open(ATTI_JSON, "r", encoding="utf-8") as f:
                 archivio = json.load(f)
-            atti_noti = {a["url_dettaglio"] for a in archivio if a.get("url_dettaglio")}
+            atti_noti = {
+                (a.get("numero_raw", ""), a.get("oggetto", ""))
+                for a in archivio
+            }
         except (json.JSONDecodeError, KeyError):
             pass
 
-    nuovi = [a for a in atti if a.get("url_dettaglio") not in atti_noti]
+    nuovi = [
+        a for a in atti
+        if (a.get("numero_raw", ""), a.get("oggetto", "")) not in atti_noti
+    ]
     log.info(f"Atti nuovi (non già archiviati): {len(nuovi)}")
     return nuovi
 
@@ -325,10 +361,23 @@ def elabora_atto(atto: dict) -> dict:
 
     log.info(f"Elaboro: {atto['oggetto'][:60]}...")
 
-    try:
-        html_dettaglio = _fetch(atto["url_dettaglio"])
-    except requests.RequestException as e:
-        log.error(f"Errore accesso dettaglio: {e}")
+    # Prova prima con l'URL originale, poi senza il parametro pop_up
+    # (Liferay pop_up a volte non include gli allegati senza sessione browser)
+    urls_da_provare = [atto["url_dettaglio"]]
+    url_no_popup = re.sub(r"[&?]p_p_state=pop_up", "", atto["url_dettaglio"])
+    if url_no_popup != atto["url_dettaglio"]:
+        urls_da_provare.append(url_no_popup)
+
+    html_dettaglio = None
+    for url_tentativo in urls_da_provare:
+        try:
+            html_dettaglio = _fetch(url_tentativo)
+            break
+        except requests.RequestException as e:
+            log.warning(f"  Tentativo fallito ({url_tentativo[:80]}): {e}")
+
+    if not html_dettaglio:
+        log.error(f"Impossibile accedere al dettaglio di: {atto.get('oggetto','?')[:50]}")
         return atto
 
     soup = BeautifulSoup(html_dettaglio, "html.parser")
@@ -345,6 +394,8 @@ def elabora_atto(atto: dict) -> dict:
     atto["cartella_locale"] = str(cartella_atto)
 
     # ── Link agli allegati PDF ───────────────────────────────────────────────
+    tutti_link = soup.find_all("a", href=True)
+    log.debug(f"  Link totali nella pagina dettaglio: {len(tutti_link)}")
     link_pdf = _trova_link_pdf(soup)
     log.info(f"  → {len(link_pdf)} allegati PDF trovati")
 
@@ -660,10 +711,13 @@ def main():
         salva_risultati([])
         return
 
-    # 2. Filtra atti rilevanti
+    # 2. Rimuovi duplicati introdotti dal portale (stesso atto, due righe)
+    tutti_atti = deduplica_lista(tutti_atti)
+
+    # 3. Filtra atti rilevanti
     atti_rilevanti = applica_filtri(tutti_atti)
 
-    # 3. Identifica solo i nuovi
+    # 4. Identifica solo i nuovi
     nuovi_atti = filtra_nuovi(atti_rilevanti)
 
     if not nuovi_atti:
@@ -671,17 +725,17 @@ def main():
         salva_risultati([])
         return
 
-    # 4. Per ogni atto nuovo: dettaglio + PDF + OCR + riassunto
+    # 5. Per ogni atto nuovo: dettaglio + PDF + OCR + riassunto
     atti_elaborati = []
     for i, atto in enumerate(nuovi_atti, start=1):
         log.info(f"[{i}/{len(nuovi_atti)}] {atto.get('tipo', '?')} — {atto.get('oggetto', '?')[:50]}")
 
         atto = elabora_atto(atto)
         atto["riassunto"] = genera_riassunto(atto)
-        atto["data_elaborazione"] = datetime.now().strftime("%Y-%m-%d")
+        atto["data_elaborazione"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         atti_elaborati.append(atto)
-        time.sleep(2)  # pausa tra gli atti per non sovraccaricare il server
+        time.sleep(1)  # pausa tra gli atti per non sovraccaricare il server
 
     # 5. Salva i risultati
     salva_risultati(atti_elaborati)
