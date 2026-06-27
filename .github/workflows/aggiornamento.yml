@@ -1,12 +1,12 @@
-name: Test Scraper Albo Pretorio
+name: Albo Pretorio — Aggiornamento Giornaliero
 
 on:
   # Avvio manuale dalla tab "Actions" di GitHub
   workflow_dispatch:
 
-  # In futuro: automatico ogni giorno alle 08:00 ora italiana (06:00 UTC)
-  # schedule:
-  #   - cron: '0 6 * * *'
+  # Automatico ogni giorno alle 08:00 ora italiana (06:00 UTC)
+  schedule:
+    - cron: '0 6 * * *'
 
 permissions:
   contents: write
