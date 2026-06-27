@@ -48,28 +48,42 @@ def atti_to_js_block(atti: list[dict]) -> str:
     """
     Converte la lista degli atti nel blocco JS atteso dal bundle.
 
-    Il bundle contiene il template come stringa JSON-escaped, quindi
-    i newline reali sono \\n e le virgolette sono escaped.
-    Usiamo json.dumps() per ogni valore stringa: produce escape sicuri
-    (es. l'apostrofo rimane apostrofo, le virgolette diventano \\").
-    Poi rimuoviamo le virgolette esterne di json.dumps e usiamo
-    virgolette doppie come delimitatori JS — compatibili con JSON.
+    Il template è serializzato come stringa JSON con virgolette doppie come
+    delimitatore esterno. I valori JS interni usano virgolette singole.
+    Regole di escape nel contesto attuale (dentro stringa JSON):
+      - backslash reale → \\\\ (4 backslash nel sorgente Python = \\ nel file)
+      - apostrofo in valore JS → \\' (backslash+apostrofo nel file JSON)
+      - newline logico tra campi → \\n (letterale nel file JSON)
+      - virgolette doppie NON vanno usate nei valori (rompono il JSON esterno)
     """
-    def jv(s: str) -> str:
-        """Serializza un valore stringa come letterale JS con virgolette doppie."""
-        # json.dumps produce "stringa" con escape corretti per tutti i caratteri
-        return json.dumps(str(s) if s else "", ensure_ascii=False)
+    def sv(s: str) -> str:
+        """
+        Produce un letterale JS con virgolette singole, safe per stare
+        dentro una stringa JSON con delimitatori doppi.
+
+        Regole:
+        - backslash → \\\\  (due backslash nel JSON = un backslash nel JS)
+        - newline   → spazio (evita \\n letterali problematici)
+        - apostrofo → \\u0027  (unicode escape: sicuro in JSON e in JS)
+        - virgoletta doppia → lasciata as-is (non rompe la stringa JS con '')
+        """
+        s = str(s) if s else ""
+        s = s.replace("\\", "\\\\")
+        s = s.replace("\n", " ").replace("\r", "")
+        s = s.replace("'", "\\u0027")   # apostrofo → unicode escape JSON-safe
+        s = s.replace('"', "\\u0022")   # virgoletta doppia → unicode escape JSON-safe
+        return f"'{s}'"
 
     righe = []
     for a in atti:
-        tipo      = jv(tipo_breve(a.get("tipo", "Atto")))
-        tipo_norm = jv(a.get("tipo_norm", ""))
-        numero    = jv(a.get("numero_raw", ""))
-        data      = jv(fmt_data(a.get("data_inizio", "")))
-        dk        = jv((a.get("data_inizio", "") or "")[:10])
-        oggetto   = jv((a.get("oggetto", "") or "")[:200])
-        riassunto = jv((a.get("riassunto", "") or "")[:400])
-        url       = jv(a.get("url_dettaglio", "") or "")
+        tipo      = sv(tipo_breve(a.get("tipo", "Atto")))
+        tipo_norm = sv(a.get("tipo_norm", ""))
+        numero    = sv(a.get("numero_raw", ""))
+        data      = sv(fmt_data(a.get("data_inizio", "")))
+        dk        = sv((a.get("data_inizio", "") or "")[:10])
+        oggetto   = sv((a.get("oggetto", "") or "")[:200])
+        riassunto = sv((a.get("riassunto", "") or "")[:400])
+        url       = sv(a.get("url_dettaglio", "") or "")
 
         riga = (
             f"    {{ tipo: {tipo}, tipoNorm: {tipo_norm}, "
