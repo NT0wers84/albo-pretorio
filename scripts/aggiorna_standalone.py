@@ -58,20 +58,61 @@ def atti_to_js_block(atti: list[dict]) -> str:
     """
     def sv(s: str) -> str:
         """
-        Produce un letterale JS con virgolette singole, safe per stare
-        dentro una stringa JSON con delimitatori doppi.
+        Produce un letterale JS con virgolette singole.
 
-        Regole:
-        - backslash → \\\\  (due backslash nel JSON = un backslash nel JS)
-        - newline   → spazio (evita \\n letterali problematici)
-        - apostrofo → \\u0027  (unicode escape: sicuro in JSON e in JS)
-        - virgoletta doppia → lasciata as-is (non rompe la stringa JS con '')
+        Il blocco ALL_ATTI si trova DENTRO una stringa JSON con delimitatori
+        doppi (il __bundler/template). Regole:
+        - Il delimitatore del letterale JS deve essere ' (singolo)
+          così le " non rompono il JSON esterno
+        - L'apostrofo ' NON può stare raw dentro 'stringa' JS: spezzerebbe
+          il letterale JS. Va escapato come \\' nel JS.
+          Ma \\' in JSON sarebbe invalido (JSON non conosce \\')...
+          SOLUZIONE: il blocco non è all'interno del JSON puro —
+          è dentro il CONTENUTO della stringa JSON, quindi i backslash
+          nel file sono interpretati dal JSON parser come escape.
+          Nel file: \\' = due caratteri \\ e ' nel JSON raw.
+          Il JSON parser legge \\ come un singolo \ e poi ' come apostrofo.
+          Il risultato nel JS decoded è \' che è un escape JS valido.
+          Quindi nel file raw dobbiamo scrivere \\\\' (4 chars = \\ nel JSON = \\ nel JS ??? NO)
+
+          ANALISI CORRETTA del file originale:
+          Il file originale aveva tipo: 'Determinazione Non Contabile'
+          e gli apostrofi nei valori erano raw: L'ASSUNZIONE (funzionava!)
+
+          Questo significa che il file originale aveva gli apostrofi raw
+          dentro le stringhe JS singole. Come può funzionare in JSON?
+          Perché ' non è un carattere speciale in JSON — è solo testo.
+
+          Ma aspetta: il file originale di HEAD~1 aveva virgolette doppie
+          e funzionava. Quello che stiamo generando ora ha virgolette singole
+          come delimitatori. Gli apostrofi raw dentro 'valore' rompono il
+          JS ma NON il JSON. Quindi il sito si carica ma il JS crasha.
+
+          SOLUZIONE FINALE: usare virgolette singole come delimitatore,
+          apostrofi escapati come \\u0027 (unicode escape - valido sia in
+          JSON che in JS), virgolette doppie lasciate raw (safe in JSON
+          esterno perché stiamo usando ' come delimitatore JS).
+
+          Wait: virgolette doppie nel valore: tipo: 'valore "citato"'
+          Nel file raw: tipo: 'valore "citato"'
+          Il JSON vede: ...'valore " — la " chiude la stringa JSON esterna!
+
+          SOLUZIONE DEFINITIVA: apostrofi → \\u0027, virgolette doppie → \\u0022
+          Questi sono unicode escape validi in JSON e in JS.
         """
         s = str(s) if s else ""
-        s = s.replace("\\", "\\\\")
+        s = s.replace("\\", "\\\\")            # backslash reale → \\
         s = s.replace("\n", " ").replace("\r", "")
-        s = s.replace("'", "\\u0027")   # apostrofo → unicode escape JSON-safe
-        s = s.replace('"', "\\u0022")   # virgoletta doppia → unicode escape JSON-safe
+        # APOSTROFI: sia ASCII ' (0x27) che tipografico ' (U+2019, 0x2019)
+        # Nel file raw: \\u0027 → JSON decode → ' → JS interpreta come '
+        # Per U+2019 lo convertiamo direttamente in ' ASCII (safe in JS dentro '')
+        s = s.replace("'", "\\\\u0027")        # apostrofo ASCII → \\u0027 nel file
+        s = s.replace("’", "\\\\u0027")   # apostrofo tipografico → \\u0027
+        s = s.replace("‘", "\\\\u0027")   # virgoletta sinistra ' → \\u0027
+        # VIRGOLETTE DOPPIE: sia ASCII " che tipografiche " " (U+201C, U+201D)
+        s = s.replace('"', "\\\\u0022")        # virgoletta doppia ASCII → \\u0022
+        s = s.replace("“", "\\\\u0022")   # " sinistra tipografica
+        s = s.replace("”", "\\\\u0022")   # " destra tipografica
         return f"'{s}'"
 
     righe = []
