@@ -46,8 +46,7 @@ PATCH1_NEW = (
     f'<span class={_Q}rias-full{_Q} style={_Q}display:none{_Q}>{{{{ item.riassunto }}}}{_SF}span>'
     f'<button class={_Q}rias-toggle{_Q} '
     f'style={_Q}display:{{{{ item.hasTruncation }}}};cursor:pointer;color:#1B4FCA;font-size:11px;'
-    f'font-weight:500;margin-left:4px;background:none;border:none;padding:0;font-family:inherit{_Q} '
-    f'onclick={_Q}{_ONCLICK}{_Q}'
+    f'font-weight:500;margin-left:4px;background:none;border:none;padding:0;font-family:inherit{_Q}'
     f'>leggi tutto{_SF}button>'
     f'{_SF}p>'
 )
@@ -78,15 +77,17 @@ PATCH2_NEW = (
 # Cerca </head> nel raw e inserisce prima lo script
 _RIAS_SCRIPT = (
     "<script>"
-    "function riasToggle(btn){"
+    "document.addEventListener('click',function(e){"
+    "var btn=e.target.closest('.rias-toggle');"
+    "if(!btn)return;"
     "var p=btn.parentNode,"
-    "sh=p.querySelector(String.fromCharCode(46,114,105,97,115,45,115,104,111,114,116)),"
-    "fu=p.querySelector(String.fromCharCode(46,114,105,97,115,45,102,117,108,108)),"
-    "ex=fu.style.display===String.fromCharCode(110,111,110,101);"
-    "sh.style.display=ex?String.fromCharCode(110,111,110,101):String.fromCharCode(105,110,108,105,110,101);"
-    "fu.style.display=ex?String.fromCharCode(105,110,108,105,110,101):String.fromCharCode(110,111,110,101);"
-    "btn.textContent=ex?String.fromCharCode(99,104,105,117,100,105):String.fromCharCode(108,101,103,103,105,32,116,117,116,116,111);"
-    "}"
+    "sh=p.querySelector('.rias-short'),"
+    "fu=p.querySelector('.rias-full'),"
+    "ex=fu.style.display==='none';"
+    "sh.style.display=ex?'none':'inline';"
+    "fu.style.display=ex?'inline':'none';"
+    "btn.textContent=ex?'chiudi':'leggi tutto';"
+    "});"
     "<\\/script>"
 )
 PATCH4_MARKER = "<\\u002Fhead>"   # nel raw JSON: </head> (= </head>)
@@ -113,16 +114,11 @@ def applica_patch_raw(raw: str) -> str:
         raw = raw.replace(PATCH1_OLD, PATCH1_NEW)
         print("  ✓ Patch 1 (riassunto espandibile) applicata")
     elif "rias-toggle" in raw:
-        # Già presente: aggiorna l'onclick a riasToggle(this) se non già fatto
-        if "riasToggle(this)" not in raw:
-            # Rimuove il vecchio onclick (qualunque forma) e mette riasToggle(this)
-            import re as _re
-            raw = _re.sub(
-                r'onclick=\\"[^"]*?\\"(?= *>leggi tutto)',
-                f'onclick=\\"riasToggle(this)\\"',
-                raw
-            )
-            print("  ✓ Patch 1 onclick aggiornato a riasToggle(this)")
+        # Già presente: rimuove onclick se ancora presente (React non lo vuole)
+        import re as _re
+        if 'onclick=\\"' in raw and 'rias-toggle' in raw:
+            raw = _re.sub(r' onclick=\\"[^"]*?\\"(?=>leggi tutto)', '', raw)
+            print("  ✓ Patch 1 onclick rimosso (event delegation)")
         else:
             print("  · Patch 1 già corretta")
     else:
@@ -144,11 +140,18 @@ def applica_patch_raw(raw: str) -> str:
     else:
         print("  ⚠ Patch 3: target non trovato")
 
-    # PATCH 4 — inietta riasToggle nel <head>
-    if "riasToggle" not in raw or "function riasToggle" not in raw:
+    # PATCH 4 — inietta event listener nel <head>
+    if "addEventListener('click'" not in raw:
         if PATCH4_MARKER in raw:
+            # Prima rimuovi eventuale vecchio script riasToggle se presente
+            import re as _re
+            raw = _re.sub(
+                r'<script>function riasToggle[^<]*<\\/script>',
+                '',
+                raw
+            )
             raw = raw.replace(PATCH4_MARKER, PATCH4_NEW, 1)
-            print("  ✓ Patch 4 (funzione riasToggle) iniettata nel <head>")
+            print("  ✓ Patch 4 (event listener click) iniettata nel <head>")
         else:
             print("  ⚠ Patch 4: </head> non trovato nel template")
     else:
