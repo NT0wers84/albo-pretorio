@@ -43,7 +43,7 @@ _ONCLICK = "riasToggle(this)"
 PATCH1_NEW = (
     f'<p style={_Q}font-size:12px;color:#636158;line-height:1.7;margin-bottom:10px;margin-top:0{_Q}>'
     f'<span class={_Q}rias-short{_Q}>{{{{ item.riassuntoShort }}}}{_SF}span>'
-    f'<span class={_Q}rias-full{_Q} style={_Q}display:none{_Q}>{{{{ item.riassunto }}}}{_SF}span>'
+    f'<span class={_Q}rias-full{_Q} style={_Q}display:none{_Q}>{{{{ item.riassuntoFull }}}}{_SF}span>'
     f'<button class={_Q}rias-toggle{_Q} '
     f'style={_Q}display:{{{{ item.hasTruncation }}}};cursor:pointer;color:#1B4FCA;font-size:11px;'
     f'font-weight:500;margin-left:4px;background:none;border:none;padding:0;font-family:inherit{_Q}'
@@ -100,7 +100,7 @@ PATCH3_OLD = (
 )
 PATCH3_NEW = (
     "riassuntoShort: a.riassunto.length > 165 ? a.riassunto.slice(0, 165) + '…' : a.riassunto,\\n"
-    "        riassunto: a.riassunto,\\n"
+    "        riassuntoFull: a.riassunto,\\n"
     "        hasTruncation: a.riassunto.length > 165 ? 'inline' : 'none',\\n"
     "        hasRiassunto: showRias,\\n"
     "        url_archivio: a.url_archivio || '',\\n"
@@ -114,11 +114,27 @@ def applica_patch_raw(raw: str) -> str:
         raw = raw.replace(PATCH1_OLD, PATCH1_NEW)
         print("  ✓ Patch 1 (riassunto espandibile) applicata")
     elif "rias-toggle" in raw:
-        # Già presente: rimuove onclick se ancora presente (React non lo vuole)
         import re as _re
+        changed = False
+        # Rimuove onclick se ancora presente (React non lo vuole)
         if 'onclick=\\"' in raw and 'rias-toggle' in raw:
             raw = _re.sub(r' onclick=\\"[^"]*?\\"(?=>leggi tutto)', '', raw)
-            print("  ✓ Patch 1 onclick rimosso (event delegation)")
+            changed = True
+        # Aggiorna item.riassunto → item.riassuntoFull nello span rias-full
+        OLD_FULL = '>{{ item.riassunto }}<\\u002Fspan><button class=\\"rias-toggle'
+        NEW_FULL = '>{{ item.riassuntoFull }}<\\u002Fspan><button class=\\"rias-toggle'
+        if OLD_FULL in raw:
+            raw = raw.replace(OLD_FULL, NEW_FULL)
+            changed = True
+        # Aggiorna riassunto: → riassuntoFull: nella Patch 3
+        if '        riassunto: a.riassunto,\\n' in raw:
+            raw = raw.replace(
+                '        riassunto: a.riassunto,\\n',
+                '        riassuntoFull: a.riassunto,\\n'
+            )
+            changed = True
+        if changed:
+            print("  ✓ Patch 1 aggiornata (riassuntoFull + no onclick)")
         else:
             print("  · Patch 1 già corretta")
     else:
