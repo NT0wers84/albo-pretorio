@@ -61,7 +61,7 @@ PATCH1_NEW = (
     f'<div class={_Q}rias-wrap{_Q} '
     f'data-rias=1 '
     f'data-tipo={_Q}{{{{ item.tipo }}}}{_Q} '
-    f'data-oggetto={_Q}{{{{ item.oggetto }}}}{_Q} '
+    f'data-oggetto={_Q}{{{{ item.oggettoFull }}}}{_Q} '
     f'data-testo={_Q}{{{{ item.riassuntoFull }}}}{_Q} '
     f'data-data={_Q}{{{{ item.data }}}}{_Q} '
     f'data-numero={_Q}{{{{ item.numero }}}}{_Q} '
@@ -167,19 +167,33 @@ _RIAS_SCRIPT = (
 PATCH4_MARKER = "<\\u002Fhead>"   # nel raw JSON: </head>
 PATCH4_NEW = _RIAS_SCRIPT + PATCH4_MARKER
 
-# PATCH 3 — JS: aggiunge hasTruncation, riassunto completo, url_archivio
-PATCH3_OLD = (
+# PATCH 3 — JS: aggiunge oggettoFull, riassuntoFull, hasTruncation, url_archivio
+# PATCH3_OLD_A = stato originale (nessuna patch applicata)
+# PATCH3_OLD_B = stato intermedio con riassunto: (invece di riassuntoFull:)
+PATCH3_OLD_A = (
     "riassuntoShort: a.riassunto.length > 165 ? a.riassunto.slice(0, 165) + '…' : a.riassunto,\\n"
     "        hasRiassunto: showRias,"
 )
-PATCH3_NEW = (
+PATCH3_OLD_B = (
     "riassuntoShort: a.riassunto.length > 165 ? a.riassunto.slice(0, 165) + '…' : a.riassunto,\\n"
-    "        riassuntoFull: a.riassunto,\\n"
+    "        riassunto: a.riassunto,\\n"
     "        hasTruncation: a.riassunto.length > 165 ? 'inline' : 'none',\\n"
     "        hasRiassunto: showRias,\\n"
     "        url_archivio: a.url_archivio || '',\\n"
     "        hasArchivio: !!(a.url_archivio),"
 )
+# Stato target corretto: oggettoFull + riassuntoFull
+PATCH3_NEW = (
+    "riassuntoShort: a.riassunto.length > 165 ? a.riassunto.slice(0, 165) + '…' : a.riassunto,\\n"
+    "        riassuntoFull: a.riassunto,\\n"
+    "        oggettoFull: a.oggetto,\\n"
+    "        hasTruncation: a.riassunto.length > 165 ? 'inline' : 'none',\\n"
+    "        hasRiassunto: showRias,\\n"
+    "        url_archivio: a.url_archivio || '',\\n"
+    "        hasArchivio: !!(a.url_archivio),"
+)
+# Alias per compatibilità
+PATCH3_OLD = PATCH3_OLD_A
 
 
 def applica_patch_raw(raw: str) -> str:
@@ -215,11 +229,15 @@ def applica_patch_raw(raw: str) -> str:
     else:
         print("  ⚠ Patch 2: target non trovato")
 
-    if PATCH3_OLD in raw:
-        raw = raw.replace(PATCH3_OLD, PATCH3_NEW)
-        print("  ✓ Patch 3 (JS dati) applicata")
-    elif "hasTruncation" in raw:
+    # Check su stringa specifica nel mapping JS (non nel template HTML)
+    if "oggettoFull: a.oggetto" in raw and "riassuntoFull: a.riassunto" in raw:
         print("  · Patch 3 già presente")
+    elif PATCH3_OLD_B in raw:
+        raw = raw.replace(PATCH3_OLD_B, PATCH3_NEW)
+        print("  ✓ Patch 3 aggiornata (riassunto→riassuntoFull + oggettoFull)")
+    elif PATCH3_OLD_A in raw:
+        raw = raw.replace(PATCH3_OLD_A, PATCH3_NEW)
+        print("  ✓ Patch 3 (JS dati) applicata")
     else:
         print("  ⚠ Patch 3: target non trovato")
 
