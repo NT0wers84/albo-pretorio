@@ -1,21 +1,12 @@
 """
 aggiorna_standalone.py — Inietta gli atti aggiornati nel file standalone HTML.
 
-Il file 'docs/Albo Pretorio Standalone.html' è un bundle autocontenuto
-generato da Claude Design. I dati degli atti sono embedded come stringa
-JS-escaped dentro il tag <script type="__bundler/template">, nella variabile:
+Il file 'docs/index.html' è un bundle autocontenuto generato da Claude Design.
+I dati degli atti sono embedded come variabile JS ALL_ATTI dentro il tag
+<script type="__bundler/template"> (stringa JSON).
 
-  ALL_ATTI = [
-    { tipo: '...', tipoNorm: '...', numero: '...', data: '...', dk: '...',
-      oggetto: '...', riassunto: '...', url: '...' },
-    ...
-  ];
-
-Questo script:
-1. Legge data/atti.json (generato da scraper.py)
-2. Converte gli atti nel formato JS-escaped atteso dal bundle
-3. Sostituisce il blocco ALL_ATTI nel file standalone
-4. Salva il file aggiornato
+Le patch UI vengono applicate direttamente sul testo raw del file
+(senza decode/re-encode) cercando le sequenze JSON-encodificate esatte.
 
 Viene chiamato dal workflow GitHub Actions dopo scraper.py.
 """
@@ -28,6 +19,114 @@ from datetime import datetime
 ATTI_JSON  = Path("data/atti.json")
 STANDALONE = Path("docs/index.html")
 
+
+# ── Sequenze raw nel file (JSON-encodificate) da patchare ───────────────────
+#
+# Nota: nel file raw le virgolette doppie sono \\" e i tag </x> sono </x>
+#
+# Le sequenze raw sono estratte direttamente dal file (JSON-encoded).
+# Nel file: \" → \\" in Python, </x> → /x nei tag JSON, \n → \\n
+
+# Helper per costruire le costanti senza conflitti di escape
+_Q  = '\\"'       # virgoletta escapata come nel file JSON
+_SF = '<\\u002F'  # </ nei tag chiusi
+
+# PATCH 1 — <p> del riassunto: aggiunge "leggi tutto" espandibile
+PATCH1_OLD = (
+    f'<p style={_Q}font-size:12px;color:#636158;line-height:1.7;margin-bottom:10px{_Q}>'
+    f'{{{{ item.riassuntoShort }}}}{_SF}p>'
+)
+
+# onclick usa singoli apici — non confliscono con \\" del JSON
+_ONCLICK = (
+    "var p=this.closest('p'),"
+    "sh=p.querySelector('.rias-short'),"
+    "fu=p.querySelector('.rias-full'),"
+    "ex=fu.style.display==='none';"
+    "sh.style.display=ex?'none':'inline';"
+    "fu.style.display=ex?'inline':'none';"
+    "this.textContent=ex?'chiudi':'leggi tutto'"
+)
+
+PATCH1_NEW = (
+    f'<p style={_Q}font-size:12px;color:#636158;line-height:1.7;margin-bottom:10px;margin-top:0{_Q}>'
+    f'<span class={_Q}rias-short{_Q}>{{{{ item.riassuntoShort }}}}{_SF}span>'
+    f'<span class={_Q}rias-full{_Q} style={_Q}display:none{_Q}>{{{{ item.riassunto }}}}{_SF}span>'
+    f'<button class={_Q}rias-toggle{_Q} '
+    f'style={_Q}display:{{{{ item.hasTruncation }}}};cursor:pointer;color:#1B4FCA;font-size:11px;'
+    f'font-weight:500;margin-left:4px;background:none;border:none;padding:0;font-family:inherit{_Q} '
+    f'onclick={_Q}{_ONCLICK}{_Q}'
+    f'>leggi tutto{_SF}button>'
+    f'{_SF}p>'
+)
+
+# PATCH 2 — link footer card: aggiunge icona archivio
+PATCH2_OLD = (
+    f'<a href={_Q}{{{{ item.url }}}}{_Q} target={_Q}_blank{_Q} rel={_Q}noopener{_Q} '
+    f'style={_Q}font-size:11px;color:#1B4FCA;text-decoration:none;display:inline-flex;'
+    f'align-items:center;gap:3px;font-weight:500{_Q}>Leggi '
+    f'<i class={_Q}ti ti-arrow-right{_Q} style={_Q}font-size:11px{_Q}>{_SF}i>{_SF}a>'
+)
+PATCH2_NEW = (
+    f'<div style={_Q}display:flex;gap:8px;align-items:center{_Q}>'
+    f'<a href={_Q}{{{{ item.url }}}}{_Q} target={_Q}_blank{_Q} rel={_Q}noopener{_Q} '
+    f'style={_Q}font-size:11px;color:#1B4FCA;text-decoration:none;display:inline-flex;'
+    f'align-items:center;gap:3px;font-weight:500{_Q}>Leggi '
+    f'<i class={_Q}ti ti-arrow-right{_Q} style={_Q}font-size:11px{_Q}>{_SF}i>{_SF}a>'
+    f'<sc-if value={_Q}{{{{ item.hasArchivio }}}}{_Q} hint-placeholder-val={_Q}{{{{ false }}}}{_Q}>'
+    f'<a href={_Q}{{{{ item.url_archivio }}}}{_Q} target={_Q}_blank{_Q} rel={_Q}noopener{_Q} '
+    f'style={_Q}font-size:11px;color:#888;text-decoration:none;display:inline-flex;'
+    f'align-items:center;gap:3px{_Q} title={_Q}Copia permanente (Wayback Machine){_Q}>'
+    f'<i class={_Q}ti ti-archive{_Q} style={_Q}font-size:11px{_Q}>{_SF}i>{_SF}a>'
+    f'{_SF}sc-if>'
+    f'{_SF}div>'
+)
+
+# PATCH 3 — JS: aggiunge hasTruncation, riassunto completo, url_archivio
+PATCH3_OLD = (
+    "riassuntoShort: a.riassunto.length > 165 ? a.riassunto.slice(0, 165) + '…' : a.riassunto,\\n"
+    "        hasRiassunto: showRias,"
+)
+PATCH3_NEW = (
+    "riassuntoShort: a.riassunto.length > 165 ? a.riassunto.slice(0, 165) + '…' : a.riassunto,\\n"
+    "        riassunto: a.riassunto,\\n"
+    "        hasTruncation: a.riassunto.length > 165 ? 'inline' : 'none',\\n"
+    "        hasRiassunto: showRias,\\n"
+    "        url_archivio: a.url_archivio || '',\\n"
+    "        hasArchivio: !!(a.url_archivio),"
+)
+
+
+def applica_patch_raw(raw: str) -> str:
+    """Applica le patch direttamente sul raw del file (idempotente)."""
+    if PATCH1_OLD in raw:
+        raw = raw.replace(PATCH1_OLD, PATCH1_NEW)
+        print("  ✓ Patch 1 (riassunto espandibile) applicata")
+    elif "rias-toggle" in raw:
+        print("  · Patch 1 già presente")
+    else:
+        print("  ⚠ Patch 1: target non trovato")
+
+    if PATCH2_OLD in raw:
+        raw = raw.replace(PATCH2_OLD, PATCH2_NEW)
+        print("  ✓ Patch 2 (link archivio) applicata")
+    elif "hasArchivio" in raw:
+        print("  · Patch 2 già presente")
+    else:
+        print("  ⚠ Patch 2: target non trovato")
+
+    if PATCH3_OLD in raw:
+        raw = raw.replace(PATCH3_OLD, PATCH3_NEW)
+        print("  ✓ Patch 3 (JS dati) applicata")
+    elif "hasTruncation" in raw:
+        print("  · Patch 3 già presente")
+    else:
+        print("  ⚠ Patch 3: target non trovato")
+
+    return raw
+
+
+# ── Helpers escape per ALL_ATTI ──────────────────────────────────────────────
 
 def fmt_data(iso: str) -> str:
     """Converte '2026-06-26' in '26/06/2026'."""
@@ -44,94 +143,52 @@ def tipo_breve(tipo_raw: str) -> str:
     return tipo_raw.strip().title()
 
 
+def sv(s: str) -> str:
+    """
+    Produce un letterale JS con virgolette singole, safe per stare
+    dentro una stringa JSON con delimitatori doppi.
+
+    Catena di escape per apostrofi:
+      Nel file raw:      \\u0027
+      Dopo JSON decode:  \\u0027  (\\ → \, poi u0027 letterale)
+      Nel JS:            '   (unicode escape → apostrofo ')
+    Stessa logica per " → \\u0022.
+    """
+    s = str(s) if s else ""
+    s = s.replace("\\", "\\\\")
+    s = s.replace("\n", " ").replace("\r", "")
+    # Apostrofi (ASCII e tipografici)
+    s = s.replace("'",  "\\\\u0027")   # ASCII '
+    s = s.replace("’", "\\\\u0027")   # RIGHT SINGLE QUOTATION MARK
+    s = s.replace("‘", "\\\\u0027")   # LEFT SINGLE QUOTATION MARK
+    # Virgolette doppie (ASCII e tipografiche)
+    s = s.replace('"',  "\\\\u0022")   # ASCII "
+    s = s.replace("“", "\\\\u0022")   # LEFT DOUBLE QUOTATION MARK
+    s = s.replace("”", "\\\\u0022")   # RIGHT DOUBLE QUOTATION MARK
+    return f"'{s}'"
+
+
 def atti_to_js_block(atti: list[dict]) -> str:
-    """
-    Converte la lista degli atti nel blocco JS atteso dal bundle.
-
-    Il template è serializzato come stringa JSON con virgolette doppie come
-    delimitatore esterno. I valori JS interni usano virgolette singole.
-    Regole di escape nel contesto attuale (dentro stringa JSON):
-      - backslash reale → \\\\ (4 backslash nel sorgente Python = \\ nel file)
-      - apostrofo in valore JS → \\' (backslash+apostrofo nel file JSON)
-      - newline logico tra campi → \\n (letterale nel file JSON)
-      - virgolette doppie NON vanno usate nei valori (rompono il JSON esterno)
-    """
-    def sv(s: str) -> str:
-        """
-        Produce un letterale JS con virgolette singole.
-
-        Il blocco ALL_ATTI si trova DENTRO una stringa JSON con delimitatori
-        doppi (il __bundler/template). Regole:
-        - Il delimitatore del letterale JS deve essere ' (singolo)
-          così le " non rompono il JSON esterno
-        - L'apostrofo ' NON può stare raw dentro 'stringa' JS: spezzerebbe
-          il letterale JS. Va escapato come \\' nel JS.
-          Ma \\' in JSON sarebbe invalido (JSON non conosce \\')...
-          SOLUZIONE: il blocco non è all'interno del JSON puro —
-          è dentro il CONTENUTO della stringa JSON, quindi i backslash
-          nel file sono interpretati dal JSON parser come escape.
-          Nel file: \\' = due caratteri \\ e ' nel JSON raw.
-          Il JSON parser legge \\ come un singolo \ e poi ' come apostrofo.
-          Il risultato nel JS decoded è \' che è un escape JS valido.
-          Quindi nel file raw dobbiamo scrivere \\\\' (4 chars = \\ nel JSON = \\ nel JS ??? NO)
-
-          ANALISI CORRETTA del file originale:
-          Il file originale aveva tipo: 'Determinazione Non Contabile'
-          e gli apostrofi nei valori erano raw: L'ASSUNZIONE (funzionava!)
-
-          Questo significa che il file originale aveva gli apostrofi raw
-          dentro le stringhe JS singole. Come può funzionare in JSON?
-          Perché ' non è un carattere speciale in JSON — è solo testo.
-
-          Ma aspetta: il file originale di HEAD~1 aveva virgolette doppie
-          e funzionava. Quello che stiamo generando ora ha virgolette singole
-          come delimitatori. Gli apostrofi raw dentro 'valore' rompono il
-          JS ma NON il JSON. Quindi il sito si carica ma il JS crasha.
-
-          SOLUZIONE FINALE: usare virgolette singole come delimitatore,
-          apostrofi escapati come \\u0027 (unicode escape - valido sia in
-          JSON che in JS), virgolette doppie lasciate raw (safe in JSON
-          esterno perché stiamo usando ' come delimitatore JS).
-
-          Wait: virgolette doppie nel valore: tipo: 'valore "citato"'
-          Nel file raw: tipo: 'valore "citato"'
-          Il JSON vede: ...'valore " — la " chiude la stringa JSON esterna!
-
-          SOLUZIONE DEFINITIVA: apostrofi → \\u0027, virgolette doppie → \\u0022
-          Questi sono unicode escape validi in JSON e in JS.
-        """
-        s = str(s) if s else ""
-        s = s.replace("\\", "\\\\")            # backslash reale → \\
-        s = s.replace("\n", " ").replace("\r", "")
-        # APOSTROFI: sia ASCII ' (0x27) che tipografico ' (U+2019, 0x2019)
-        # Nel file raw: \\u0027 → JSON decode → ' → JS interpreta come '
-        # Per U+2019 lo convertiamo direttamente in ' ASCII (safe in JS dentro '')
-        s = s.replace("'", "\\\\u0027")        # apostrofo ASCII → \\u0027 nel file
-        s = s.replace("’", "\\\\u0027")   # apostrofo tipografico → \\u0027
-        s = s.replace("‘", "\\\\u0027")   # virgoletta sinistra ' → \\u0027
-        # VIRGOLETTE DOPPIE: sia ASCII " che tipografiche " " (U+201C, U+201D)
-        s = s.replace('"', "\\\\u0022")        # virgoletta doppia ASCII → \\u0022
-        s = s.replace("“", "\\\\u0022")   # " sinistra tipografica
-        s = s.replace("”", "\\\\u0022")   # " destra tipografica
-        return f"'{s}'"
-
+    """Converte la lista degli atti nel blocco JS ALL_ATTI."""
     righe = []
     for a in atti:
-        tipo      = sv(tipo_breve(a.get("tipo", "Atto")))
-        tipo_norm = sv(a.get("tipo_norm", ""))
-        numero    = sv(a.get("numero_raw", ""))
-        data      = sv(fmt_data(a.get("data_inizio", "")))
-        dk        = sv((a.get("data_inizio", "") or "")[:10])
-        oggetto   = sv((a.get("oggetto", "") or "")[:200])
-        riassunto = sv((a.get("riassunto", "") or "")[:400])
-        url       = sv(a.get("url_dettaglio", "") or "")
+        tipo         = sv(tipo_breve(a.get("tipo", "Atto")))
+        tipo_norm    = sv(a.get("tipo_norm", ""))
+        numero       = sv(a.get("numero_raw", ""))
+        data         = sv(fmt_data(a.get("data_inizio", "")))
+        dk           = sv((a.get("data_inizio", "") or "")[:10])
+        oggetto      = sv((a.get("oggetto", "") or "")[:200])
+        riassunto    = sv((a.get("riassunto", "") or "")[:600])
+        url          = sv(a.get("url_dettaglio", "") or "")
+        url_archivio = sv(a.get("url_archivio", "") or "")
 
         riga = (
             f"    {{ tipo: {tipo}, tipoNorm: {tipo_norm}, "
             f"numero: {numero}, data: {data}, dk: {dk},\\n"
             f"      oggetto: {oggetto},\\n"
             f"      riassunto: {riassunto},\\n"
-            f"      url: {url} }}"
+            f"      url: {url},\\n"
+            f"      url_archivio: {url_archivio} }}"
         )
         righe.append(riga)
 
@@ -139,11 +196,9 @@ def atti_to_js_block(atti: list[dict]) -> str:
     return f"ALL_ATTI = [\\n{corpo},\\n  ]"
 
 
+# ── Core ──────────────────────────────────────────────────────────────────────
+
 def aggiorna_standalone(atti: list[dict]) -> bool:
-    """
-    Sostituisce il blocco ALL_ATTI nel file standalone.
-    Restituisce True se il file è stato aggiornato.
-    """
     if not STANDALONE.exists():
         print(f"File non trovato: {STANDALONE}")
         return False
@@ -151,27 +206,48 @@ def aggiorna_standalone(atti: list[dict]) -> bool:
     with open(STANDALONE, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Trova il blocco ALL_ATTI = [ ... ];
-    # Nel file il contenuto è dentro una stringa JSON, quindi i newline
-    # sono \\n (due caratteri backslash+n, non newline reale)
-    pattern = re.compile(r"ALL_ATTI = \[.*?\]", re.DOTALL)
-    match = pattern.search(content)
+    # Trova i limiti del tag template
+    TAG = '<script type="__bundler/template">'
+    tag_start = content.find(TAG)
+    if tag_start == -1:
+        print("ERRORE: tag __bundler/template non trovato")
+        return False
+    tag_content_start = tag_start + len(TAG)
+    tag_end = content.find("</script>", tag_content_start)
 
-    if not match:
-        print("ERRORE: blocco ALL_ATTI non trovato nel file standalone.")
-        print("Il file potrebbe avere una struttura diversa dal previsto.")
+    raw = content[tag_content_start:tag_end]
+
+    # Verifica che il JSON di partenza sia valido
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"ERRORE: template JSON non valido prima delle patch: {e}")
         return False
 
-    print(f"Blocco trovato: posizione {match.start()}–{match.end()}")
-    print(f"Atti da iniettare: {len(atti)}")
+    # Applica patch UI sul raw
+    print("Applicazione patch al template:")
+    raw = applica_patch_raw(raw)
+
+    # Sostituisce il blocco ALL_ATTI nel raw
+    pattern = re.compile(r"ALL_ATTI = \[.*?\]", re.DOTALL)
+    match = pattern.search(raw)
+    if not match:
+        print("ERRORE: blocco ALL_ATTI non trovato nel raw")
+        return False
+
+    print(f"  Blocco ALL_ATTI: posizione {match.start()}–{match.end()}")
+    print(f"  Atti da iniettare: {len(atti)}")
 
     nuovo_blocco = atti_to_js_block(atti)
-    nuovo_content = content[:match.start()] + nuovo_blocco + content[match.end():]
+    raw = raw[:match.start()] + nuovo_blocco + raw[match.end():]
+
+    # Riassembla il file
+    new_content = content[:tag_content_start] + raw + content[tag_end:]
 
     with open(STANDALONE, "w", encoding="utf-8") as f:
-        f.write(nuovo_content)
+        f.write(new_content)
 
-    print(f"File aggiornato: {STANDALONE} ({len(nuovo_content)//1024} KB)")
+    print(f"File aggiornato: {STANDALONE} ({len(new_content)//1024} KB)")
     return True
 
 
@@ -187,6 +263,20 @@ def main():
     ok = aggiorna_standalone(atti)
 
     if ok:
+        # Verifica finale
+        with open(STANDALONE, "r", encoding="utf-8") as f:
+            content = f.read()
+        TAG = '<script type="__bundler/template">'
+        ts = content.find(TAG) + len(TAG)
+        te = content.find("</script>", ts)
+        try:
+            json.loads(content[ts:te])
+            print("✅ JSON template VALIDO")
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON template INVALIDO: {e}")
+            pos = e.pos
+            raw = content[ts:te]
+            print(f"Contesto: {repr(raw[max(0,pos-100):pos+100])}")
         print(f"Aggiornamento completato: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     else:
         print("Aggiornamento fallito.")

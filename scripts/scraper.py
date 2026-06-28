@@ -687,6 +687,38 @@ Usa un tono neutro e informativo. Inizia direttamente con il riassunto, senza in
 # 7. SALVATAGGIO JSON
 # ─────────────────────────────────────────────────────────────────────────────
 
+def archivia_wayback(atto: dict) -> str:
+    """
+    Invia l'URL della pagina di dettaglio dell'atto al Wayback Machine
+    (Internet Archive) e restituisce l'URL della copia archiviata.
+
+    API: POST https://web.archive.org/save/<url>
+    Risposta: header 'Content-Location' con il percorso /web/YYYYMMDDHHMMSS/url
+    Gratuita, nessuna autenticazione richiesta.
+    """
+    url = atto.get("url_dettaglio", "")
+    if not url:
+        return ""
+
+    save_url = f"https://web.archive.org/save/{url}"
+    try:
+        resp = SESSION.post(save_url, timeout=30, allow_redirects=True)
+        # L'archivio risponde con Content-Location: /web/20260628.../url
+        location = resp.headers.get("Content-Location", "")
+        if location:
+            archived = f"https://web.archive.org{location}"
+            log.info(f"  Wayback Machine: {archived[:80]}")
+            return archived
+        # Fallback: costruisci l'URL dalla risposta finale
+        if "web.archive.org/web/" in resp.url:
+            log.info(f"  Wayback Machine (redirect): {resp.url[:80]}")
+            return resp.url
+        log.warning(f"  Wayback Machine: risposta non attesa ({resp.status_code})")
+    except Exception as e:
+        log.warning(f"  Wayback Machine: errore ({e})")
+    return ""
+
+
 def salva_risultati(nuovi_atti: list[dict]):
     """
     Aggiorna data/atti.json (archivio completo) e
@@ -819,6 +851,7 @@ def main():
 
         atto = elabora_atto(atto)
         atto["riassunto"] = genera_riassunto(atto)
+        atto["url_archivio"] = archivia_wayback(atto)
         atto["data_elaborazione"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         atti_elaborati.append(atto)
