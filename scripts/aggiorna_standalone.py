@@ -32,15 +32,14 @@ _Q  = '\\"'       # virgoletta escapata come nel file JSON
 _SF = '<\\u002F'  # </ nei tag chiusi
 
 # PATCH 1 — <p> del riassunto: aggiunge "leggi tutto" espandibile
-PATCH1_OLD = (
+# PATCH1_OLD copre due possibili stati del file:
+# (a) file originale Claude Design (p semplice)
+# (b) file dopo patch precedente con span nascosti
+PATCH1_OLD_A = (
     f'<p style={_Q}font-size:12px;color:#636158;line-height:1.7;margin-bottom:10px{_Q}>'
     f'{{{{ item.riassuntoShort }}}}{_SF}p>'
 )
-
-# onclick chiama una funzione globale — nessuna stringa da escapare nell'attributo HTML
-_ONCLICK = "riasToggle(this)"
-
-PATCH1_NEW = (
+PATCH1_OLD_B = (
     f'<p style={_Q}font-size:12px;color:#636158;line-height:1.7;margin-bottom:10px;margin-top:0{_Q}>'
     f'<span class={_Q}rias-short{_Q}>{{{{ item.riassuntoShort }}}}{_SF}span>'
     f'<span class={_Q}rias-full{_Q} style={_Q}display:none{_Q}>{{{{ item.riassuntoFull }}}}{_SF}span>'
@@ -48,7 +47,30 @@ PATCH1_NEW = (
     f'style={_Q}display:{{{{ item.hasTruncation }}}};cursor:pointer;color:#1B4FCA;font-size:11px;'
     f'font-weight:500;margin-left:4px;background:none;border:none;padding:0;font-family:inherit{_Q}'
     f'>leggi tutto{_SF}button>'
+)
+PATCH1_OLD = PATCH1_OLD_A  # default per file originale
+
+# onclick chiama una funzione globale — nessuna stringa da escapare nell'attributo HTML
+_ONCLICK = "riasToggle(this)"
+
+PATCH1_NEW = (
+    # Wrapper con data-* che porta i dati completi — letti dal modale JS
+    f'<div class={_Q}rias-wrap{_Q} '
+    f'data-rias=1 '
+    f'data-tipo={_Q}{{{{ item.tipo }}}}{_Q} '
+    f'data-oggetto={_Q}{{{{ item.oggetto }}}}{_Q} '
+    f'data-testo={_Q}{{{{ item.riassuntoFull }}}}{_Q} '
+    f'data-data={_Q}{{{{ item.data }}}}{_Q} '
+    f'data-numero={_Q}{{{{ item.numero }}}}{_Q} '
+    f'data-url={_Q}{{{{ item.url }}}}{_Q}>'
+    f'<p style={_Q}font-size:12px;color:#636158;line-height:1.7;margin-bottom:6px;margin-top:0{_Q}>'
+    f'{{{{ item.riassuntoShort }}}}'
     f'{_SF}p>'
+    f'<button class={_Q}rias-toggle{_Q} '
+    f'style={_Q}display:{{{{ item.hasTruncation }}}};cursor:pointer;color:#1B4FCA;font-size:11px;'
+    f'font-weight:500;background:none;border:none;padding:0;font-family:inherit;margin-bottom:8px{_Q}'
+    f'>leggi tutto{_SF}button>'
+    f'{_SF}div>'
 )
 
 # PATCH 2 — link footer card: aggiunge icona archivio
@@ -76,17 +98,70 @@ PATCH2_NEW = (
 # PATCH 4 — Inietta funzione riasToggle nel <head> del template
 # Cerca </head> nel raw e inserisce prima lo script
 _RIAS_SCRIPT = (
+    "<style>"
+    "#rias-overlay{"
+    "display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;"
+    "align-items:center;justify-content:center;padding:20px;box-sizing:border-box;"
+    "backdrop-filter:blur(2px)}"
+    "#rias-overlay.open{display:flex}"
+    "#rias-box{"
+    "background:#fff;border-radius:16px;max-width:640px;width:100%;"
+    "max-height:85vh;overflow-y:auto;padding:28px 28px 24px;"
+    "box-shadow:0 20px 60px rgba(0,0,0,.25);position:relative;"
+    "font-family:inherit}"
+    "#rias-chip{"
+    "display:inline-flex;align-items:center;gap:6px;font-size:11px;"
+    "font-weight:600;padding:4px 10px;border-radius:100px;"
+    "background:#f0f4ff;color:#1B4FCA;margin-bottom:12px}"
+    "#rias-oggetto{"
+    "font-size:15px;font-weight:700;line-height:1.4;"
+    "color:#1a1a1a;margin:0 0 14px}"
+    "#rias-testo{"
+    "font-size:13px;line-height:1.8;color:#444;margin:0 0 20px}"
+    "#rias-meta{"
+    "font-size:11px;color:#aaa;border-top:1px solid #f0f0f0;"
+    "padding-top:14px;display:flex;justify-content:space-between;align-items:center}"
+    "#rias-leggi{"
+    "font-size:12px;font-weight:600;color:#1B4FCA;text-decoration:none;"
+    "display:inline-flex;align-items:center;gap:4px}"
+    "#rias-close{"
+    "position:absolute;top:16px;right:16px;width:30px;height:30px;"
+    "border:none;background:#f4f4f4;border-radius:50%;cursor:pointer;"
+    "font-size:16px;display:flex;align-items:center;justify-content:center;"
+    "color:#666;line-height:1}"
+    "<\\/style>"
+    "<div id=rias-overlay>"
+    "<div id=rias-box>"
+    "<button id=rias-close onclick=document.getElementById('rias-overlay').classList.remove('open')>"
+    "&#x2715;<\\/button>"
+    "<div id=rias-chip><\\/div>"
+    "<p id=rias-oggetto><\\/p>"
+    "<p id=rias-testo><\\/p>"
+    "<div id=rias-meta>"
+    "<span id=rias-data><\\/span>"
+    "<a id=rias-leggi href=# target=_blank>"
+    "Leggi atto completo &#x2192;<\\/a>"
+    "<\\/div>"
+    "<\\/div>"
+    "<\\/div>"
     "<script>"
+    "document.getElementById('rias-overlay').addEventListener('click',function(e){"
+    "if(e.target===this)this.classList.remove('open');"
+    "});"
+    "document.addEventListener('keydown',function(e){"
+    "if(e.key==='Escape')document.getElementById('rias-overlay').classList.remove('open');"
+    "});"
     "document.addEventListener('click',function(e){"
     "var btn=e.target.closest('.rias-toggle');"
     "if(!btn)return;"
-    "var p=btn.parentNode,"
-    "sh=p.querySelector('.rias-short'),"
-    "fu=p.querySelector('.rias-full'),"
-    "ex=fu.style.display==='none';"
-    "sh.style.display=ex?'none':'inline';"
-    "fu.style.display=ex?'inline':'none';"
-    "btn.textContent=ex?'chiudi':'leggi tutto';"
+    "var card=btn.closest('[data-rias]');"
+    "if(!card)return;"
+    "document.getElementById('rias-chip').textContent=card.dataset.tipo||'';"
+    "document.getElementById('rias-oggetto').textContent=card.dataset.oggetto||'';"
+    "document.getElementById('rias-testo').textContent=card.dataset.testo||'';"
+    "document.getElementById('rias-data').textContent=(card.dataset.data||'')+' · '+(card.dataset.numero||'');"
+    "document.getElementById('rias-leggi').href=card.dataset.url||'#';"
+    "document.getElementById('rias-overlay').classList.add('open');"
     "});"
     "<\\/script>"
 )
@@ -110,33 +185,14 @@ PATCH3_NEW = (
 
 def applica_patch_raw(raw: str) -> str:
     """Applica le patch direttamente sul raw del file (idempotente)."""
-    if PATCH1_OLD in raw:
-        raw = raw.replace(PATCH1_OLD, PATCH1_NEW)
-        print("  ✓ Patch 1 (riassunto espandibile) applicata")
-    elif "rias-toggle" in raw:
-        import re as _re
-        changed = False
-        # Rimuove onclick se ancora presente (React non lo vuole)
-        if 'onclick=\\"' in raw and 'rias-toggle' in raw:
-            raw = _re.sub(r' onclick=\\"[^"]*?\\"(?=>leggi tutto)', '', raw)
-            changed = True
-        # Aggiorna item.riassunto → item.riassuntoFull nello span rias-full
-        OLD_FULL = '>{{ item.riassunto }}<\\u002Fspan><button class=\\"rias-toggle'
-        NEW_FULL = '>{{ item.riassuntoFull }}<\\u002Fspan><button class=\\"rias-toggle'
-        if OLD_FULL in raw:
-            raw = raw.replace(OLD_FULL, NEW_FULL)
-            changed = True
-        # Aggiorna riassunto: → riassuntoFull: nella Patch 3
-        if '        riassunto: a.riassunto,\\n' in raw:
-            raw = raw.replace(
-                '        riassunto: a.riassunto,\\n',
-                '        riassuntoFull: a.riassunto,\\n'
-            )
-            changed = True
-        if changed:
-            print("  ✓ Patch 1 aggiornata (riassuntoFull + no onclick)")
-        else:
-            print("  · Patch 1 già corretta")
+    if "rias-wrap" in raw:
+        print("  · Patch 1 già corretta (modale data-*)")
+    elif PATCH1_OLD_B in raw:
+        raw = raw.replace(PATCH1_OLD_B, PATCH1_NEW)
+        print("  ✓ Patch 1 aggiornata (span→modale data-*)")
+    elif PATCH1_OLD_A in raw:
+        raw = raw.replace(PATCH1_OLD_A, PATCH1_NEW)
+        print("  ✓ Patch 1 (modale data-*) applicata")
     else:
         print("  ⚠ Patch 1: target non trovato")
 
