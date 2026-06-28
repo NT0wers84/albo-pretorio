@@ -74,18 +74,26 @@ OGGETTI_ESCLUSI = [
 ]
 
 # ── Sessione HTTP (per download PDF e risorse statiche) ───────────────────────
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 SESSION = requests.Session()
 SESSION.headers.update({
     "User-Agent": (
-        "Mozilla/5.0 (compatible; AlboPretorioBot/1.0; "
-        "+https://github.com/NT0wers84/albo-pretorio)"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
     )
 })
+# Retry automatico su timeout e errori di connessione (3 tentativi, backoff 2s)
+_retry = Retry(total=3, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
+SESSION.mount("https://", HTTPAdapter(max_retries=_retry))
+SESSION.mount("http://", HTTPAdapter(max_retries=_retry))
 
 
 def _fetch(url: str) -> str:
     """Scarica una pagina con requests (nessun JS necessario per PAPCA)."""
-    resp = SESSION.get(url, timeout=30)
+    resp = SESSION.get(url, timeout=90)
     resp.raise_for_status()
     return resp.text
 
@@ -470,7 +478,7 @@ def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup
     )
 
     try:
-        resp = SESSION.get(url_endpoint, timeout=30)
+        resp = SESSION.get(url_endpoint, timeout=90)
         log.info(f"  Endpoint recuperaDettaglio: status={resp.status_code} len={len(resp.text)}")
         if resp.status_code == 200 and len(resp.text) > 200:
             soup2 = BeautifulSoup(resp.text, "html.parser")
