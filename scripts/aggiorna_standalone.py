@@ -145,9 +145,11 @@ _RIAS_SCRIPT = (
     "<script>"
     "(function(){"
     "var ov=document.getElementById('rias-ov');"
-    "document.getElementById('rias-x').onclick=function(){ov.classList.remove('open');};"
-    "ov.onclick=function(e){if(e.target===ov)ov.classList.remove('open');};"
-    "document.onkeydown=function(e){if(e.key==='Escape')ov.classList.remove('open');};"
+    "function openModal(){ov.classList.add('open');document.body.style.overflow='hidden';}"
+    "function closeModal(){ov.classList.remove('open');document.body.style.overflow='';}"
+    "document.getElementById('rias-x').onclick=closeModal;"
+    "ov.onclick=function(e){if(e.target===ov)closeModal();};"
+    "document.onkeydown=function(e){if(e.key==='Escape')closeModal();};"
     "document.addEventListener('click',function(e){"
     "var b=e.target.closest('.rias-toggle');"
     "if(!b)return;"
@@ -156,9 +158,9 @@ _RIAS_SCRIPT = (
     "document.getElementById('rias-chip').textContent=w.dataset.tipo||'';"
     "document.getElementById('rias-ogg').textContent=w.dataset.oggetto||'';"
     "document.getElementById('rias-txt').textContent=w.dataset.testo||'';"
-    "document.getElementById('rias-dt').textContent=(w.dataset.data||'')+' · '+(w.dataset.numero||'')+' · '+(w.dataset.tipo||'');"
+    "document.getElementById('rias-dt').textContent=(w.dataset.data||'')+' · '+(w.dataset.numero||'');"
     "document.getElementById('rias-lnk').href=w.dataset.url||'#';"
-    "ov.classList.add('open');"
+    "openModal();"
     "});"
     "})();"
     "<\\/script>"
@@ -317,7 +319,7 @@ def atti_to_js_block(atti: list[dict]) -> str:
         data         = sv(fmt_data(a.get("data_inizio", "")))
         dk           = sv((a.get("data_inizio", "") or "")[:10])
         oggetto      = sv((a.get("oggetto", "") or "")[:200])
-        riassunto    = sv((a.get("riassunto", "") or "")[:600])
+        riassunto    = sv(a.get("riassunto", "") or "")
         url          = sv(a.get("url_dettaglio", "") or "")
         url_archivio = sv(a.get("url_archivio", "") or "")
 
