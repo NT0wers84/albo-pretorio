@@ -48,6 +48,9 @@ PATCH1_OLD_B = (
     f'font-weight:500;margin-left:4px;background:none;border:none;padding:0;font-family:inherit{_Q}'
     f'>leggi tutto{_SF}button>'
 )
+# Variante con item.riassunto (senza Full) + onclick inline — presente nel commit b3ce29a
+# Usa un pattern regex per trovare qualunque variante del bottone con onclick
+PATCH1_OLD_C = None  # gestita via regex nella funzione
 PATCH1_OLD = PATCH1_OLD_A  # default per file originale
 
 # onclick chiama una funzione globale — nessuna stringa da escapare nell'attributo HTML
@@ -95,77 +98,73 @@ PATCH2_NEW = (
     f'{_SF}div>'
 )
 
-# PATCH 4 — Inietta funzione riasToggle nel <head> del template
-# Cerca </head> nel raw e inserisce prima lo script
+# PATCH 4 — Inietta modale overlay + event listener nel <head> del template
+# NOTA: tutti gli apostrofi nel JS devono essere \\u0027 (non letterali)
+# perché il raw è una stringa JSON e ' spezzerebbe il parser.
+# Il check "già presente" usa 'rias-ov' (id univoco del modale).
+_Q4 = "\\u0027"   # apostrofo sicuro per JS dentro JSON raw
+
+def _js(s: str) -> str:
+    """Sostituisce ' con \\u0027 nel codice JS prima dell'iniezione nel raw."""
+    return s.replace("'", _Q4)
+
 _RIAS_SCRIPT = (
     "<style>"
-    "#rias-overlay{"
-    "display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;"
+    "#rias-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;"
     "align-items:center;justify-content:center;padding:20px;box-sizing:border-box;"
-    "backdrop-filter:blur(2px)}"
-    "#rias-overlay.open{display:flex}"
-    "#rias-box{"
-    "background:#fff;border-radius:16px;max-width:640px;width:100%;"
-    "max-height:85vh;overflow-y:auto;padding:28px 28px 24px;"
-    "box-shadow:0 20px 60px rgba(0,0,0,.25);position:relative;"
-    "font-family:inherit}"
-    "#rias-chip{"
-    "display:inline-flex;align-items:center;gap:6px;font-size:11px;"
-    "font-weight:600;padding:4px 10px;border-radius:100px;"
-    "background:#f0f4ff;color:#1B4FCA;margin-bottom:12px}"
-    "#rias-oggetto{"
-    "font-size:15px;font-weight:700;line-height:1.4;"
-    "color:#1a1a1a;margin:0 0 14px}"
-    "#rias-testo{"
-    "font-size:13px;line-height:1.8;color:#444;margin:0 0 20px}"
-    "#rias-meta{"
-    "font-size:11px;color:#aaa;border-top:1px solid #f0f0f0;"
+    "backdrop-filter:blur(3px)}"
+    "#rias-ov.open{display:flex}"
+    "#rias-box{background:#fff;border-radius:16px;max-width:620px;width:100%;"
+    "max-height:88vh;overflow-y:auto;padding:28px 28px 24px;"
+    "box-shadow:0 24px 60px rgba(0,0,0,.3);position:relative;font-family:inherit}"
+    "#rias-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;"
+    "font-weight:600;padding:4px 12px;border-radius:100px;background:#f0f4ff;"
+    "color:#1B4FCA;margin-bottom:12px}"
+    "#rias-ogg{font-size:15px;font-weight:700;line-height:1.4;color:#1a1a1a;margin:0 0 14px}"
+    "#rias-txt{font-size:13.5px;line-height:1.85;color:#444;margin:0 0 20px}"
+    "#rias-ft{font-size:11px;color:#aaa;border-top:1px solid #f0f0f0;"
     "padding-top:14px;display:flex;justify-content:space-between;align-items:center}"
-    "#rias-leggi{"
-    "font-size:12px;font-weight:600;color:#1B4FCA;text-decoration:none;"
-    "display:inline-flex;align-items:center;gap:4px}"
-    "#rias-close{"
-    "position:absolute;top:16px;right:16px;width:30px;height:30px;"
-    "border:none;background:#f4f4f4;border-radius:50%;cursor:pointer;"
-    "font-size:16px;display:flex;align-items:center;justify-content:center;"
-    "color:#666;line-height:1}"
+    "#rias-lnk{font-size:12px;font-weight:600;color:#1B4FCA;text-decoration:none}"
+    "#rias-x{position:absolute;top:14px;right:14px;width:28px;height:28px;"
+    "border:none;background:#f0f0f0;border-radius:50%;cursor:pointer;font-size:15px;"
+    "display:flex;align-items:center;justify-content:center;color:#555;line-height:1}"
     "<\\/style>"
-    "<div id=rias-overlay>"
+    "<div id=rias-ov>"
     "<div id=rias-box>"
-    "<button id=rias-close onclick=document.getElementById('rias-overlay').classList.remove('open')>"
-    "&#x2715;<\\/button>"
+    "<button id=rias-x>&#x2715;<\\/button>"
     "<div id=rias-chip><\\/div>"
-    "<p id=rias-oggetto><\\/p>"
-    "<p id=rias-testo><\\/p>"
-    "<div id=rias-meta>"
-    "<span id=rias-data><\\/span>"
-    "<a id=rias-leggi href=# target=_blank>"
-    "Leggi atto completo &#x2192;<\\/a>"
+    "<p id=rias-ogg><\\/p>"
+    "<p id=rias-txt><\\/p>"
+    "<div id=rias-ft>"
+    "<span id=rias-dt><\\/span>"
+    "<a id=rias-lnk href=# target=_blank>Leggi atto completo &#x2192;<\\/a>"
     "<\\/div>"
     "<\\/div>"
     "<\\/div>"
+) + _js(
     "<script>"
-    "document.getElementById('rias-overlay').addEventListener('click',function(e){"
-    "if(e.target===this)this.classList.remove('open');"
-    "});"
-    "document.addEventListener('keydown',function(e){"
-    "if(e.key==='Escape')document.getElementById('rias-overlay').classList.remove('open');"
-    "});"
+    "(function(){"
+    "var ov=document.getElementById('rias-ov');"
+    "document.getElementById('rias-x').onclick=function(){ov.classList.remove('open');};"
+    "ov.onclick=function(e){if(e.target===ov)ov.classList.remove('open');};"
+    "document.onkeydown=function(e){if(e.key==='Escape')ov.classList.remove('open');};"
     "document.addEventListener('click',function(e){"
-    "var btn=e.target.closest('.rias-toggle');"
-    "if(!btn)return;"
-    "var card=btn.closest('[data-rias]');"
-    "if(!card)return;"
-    "document.getElementById('rias-chip').textContent=card.dataset.tipo||'';"
-    "document.getElementById('rias-oggetto').textContent=card.dataset.oggetto||'';"
-    "document.getElementById('rias-testo').textContent=card.dataset.testo||'';"
-    "document.getElementById('rias-data').textContent=(card.dataset.data||'')+' · '+(card.dataset.numero||'');"
-    "document.getElementById('rias-leggi').href=card.dataset.url||'#';"
-    "document.getElementById('rias-overlay').classList.add('open');"
+    "var b=e.target.closest('.rias-toggle');"
+    "if(!b)return;"
+    "var w=b.closest('[data-rias]');"
+    "if(!w)return;"
+    "document.getElementById('rias-chip').textContent=w.dataset.tipo||'';"
+    "document.getElementById('rias-ogg').textContent=w.dataset.oggetto||'';"
+    "document.getElementById('rias-txt').textContent=w.dataset.testo||'';"
+    "document.getElementById('rias-dt').textContent=(w.dataset.data||'')+' · '+(w.dataset.numero||'')+' · '+(w.dataset.tipo||'');"
+    "document.getElementById('rias-lnk').href=w.dataset.url||'#';"
+    "ov.classList.add('open');"
     "});"
+    "})();"
     "<\\/script>"
 )
-PATCH4_MARKER = "<\\u002Fhead>"   # nel raw JSON: </head> (= </head>)
+
+PATCH4_MARKER = "<\\u002Fhead>"   # nel raw JSON: </head>
 PATCH4_NEW = _RIAS_SCRIPT + PATCH4_MARKER
 
 # PATCH 3 — JS: aggiunge hasTruncation, riassunto completo, url_archivio
@@ -189,10 +188,22 @@ def applica_patch_raw(raw: str) -> str:
         print("  · Patch 1 già corretta (modale data-*)")
     elif PATCH1_OLD_B in raw:
         raw = raw.replace(PATCH1_OLD_B, PATCH1_NEW)
-        print("  ✓ Patch 1 aggiornata (span→modale data-*)")
+        print("  ✓ Patch 1 aggiornata (span v2→modale data-*)")
     elif PATCH1_OLD_A in raw:
         raw = raw.replace(PATCH1_OLD_A, PATCH1_NEW)
         print("  ✓ Patch 1 (modale data-*) applicata")
+    elif "rias-short" in raw and "rias-toggle" in raw:
+        # Variante con onclick inline o struttura diversa — usa regex
+        import re as _re
+        m_p1 = _re.search(
+            r'<p style=\\"font-size:12px[^>]+>.*?<\\u002Fbutton>',
+            raw, _re.DOTALL
+        )
+        if m_p1:
+            raw = raw[:m_p1.start()] + PATCH1_NEW + raw[m_p1.end():]
+            print("  ✓ Patch 1 aggiornata (regex→modale data-*)")
+        else:
+            print("  ⚠ Patch 1: regex non trova il blocco")
     else:
         print("  ⚠ Patch 1: target non trovato")
 
@@ -212,18 +223,22 @@ def applica_patch_raw(raw: str) -> str:
     else:
         print("  ⚠ Patch 3: target non trovato")
 
-    # PATCH 4 — inietta event listener nel <head>
-    if "addEventListener('click'" not in raw:
+    # PATCH 4 — inietta modale overlay + event listener nel <head>
+    # Check su 'rias-ov' (id univoco del nuovo modale)
+    if 'id=rias-ov' not in raw and 'id=\\"rias-ov\\"' not in raw:
         if PATCH4_MARKER in raw:
-            # Prima rimuovi eventuale vecchio script riasToggle se presente
+            # Rimuovi eventuale vecchio script (varianti precedenti)
             import re as _re
+            raw = _re.sub(r'<script>function riasToggle[^<]*<\\/script>', '', raw)
+            # Rimuovi vecchio modale rias-overlay se presente
             raw = _re.sub(
-                r'<script>function riasToggle[^<]*<\\/script>',
+                r'<style>#rias-overlay\{.*?<\\/script>',
                 '',
-                raw
+                raw,
+                flags=_re.DOTALL
             )
             raw = raw.replace(PATCH4_MARKER, PATCH4_NEW, 1)
-            print("  ✓ Patch 4 (event listener click) iniettata nel <head>")
+            print("  ✓ Patch 4 (modale overlay) iniettata nel <head>")
         else:
             print("  ⚠ Patch 4: </head> non trovato nel template")
     else:
