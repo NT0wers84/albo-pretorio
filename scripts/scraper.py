@@ -398,7 +398,10 @@ def elabora_atto(atto: dict) -> dict:
     # quindi requests non li vede nell'HTML statico.
     # Usiamo direttamente l'endpoint recuperaDettaglio con l'ID atto dall'URL.
     link_pdf = _trova_link_pdf_da_endpoint(atto["url_dettaglio"], soup)
-    log.info(f"  → {len(link_pdf)} allegati PDF trovati")
+    if link_pdf:
+        log.info(f"  → {len(link_pdf)} allegati PDF trovati")
+    else:
+        log.warning(f"  → Nessun allegato PDF trovato per {atto.get('numero','?')} — il riassunto sarà incompleto")
 
     atto["allegati"] = []
     testi_pdf = []
@@ -468,12 +471,14 @@ def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup
 
     try:
         resp = SESSION.get(url_endpoint, timeout=30)
+        log.info(f"  Endpoint recuperaDettaglio: status={resp.status_code} len={len(resp.text)}")
         if resp.status_code == 200 and len(resp.text) > 200:
             soup2 = BeautifulSoup(resp.text, "html.parser")
             links = _trova_link_pdf(soup2)
             if links:
-                log.debug(f"  Trovati {len(links)} PDF via endpoint recuperaDettaglio")
+                log.info(f"  Trovati {len(links)} PDF via endpoint recuperaDettaglio")
                 return links
+            log.info(f"  Risposta endpoint (primi 300 chars): {resp.text[:300]}")
             # Cerca anche pattern downloadAllegato direttamente nel testo
             ids_allegati = re.findall(r"[_&]id=(\d+).*?downloadAllegato|downloadAllegato.*?[_&]id=(\d+)", resp.text)
             if not ids_allegati:
@@ -849,6 +854,18 @@ def main():
             log.info(f"Rigenerazione riassunti per {len(senza_riassunto)} atti esistenti...")
             for a in senza_riassunto:
                 log.info(f"  Riassunto: {a.get('tipo','?')} {a.get('numero','?')}")
+                # Se testo_combinato è vuoto, prova a rileggerlo dai PDF su disco
+                if not a.get("testo_combinato"):
+                    cartella = a.get("cartella_locale", "")
+                    if cartella and Path(cartella).exists():
+                        testi = []
+                        for pdf_path in sorted(Path(cartella).glob("*.pdf")):
+                            t = _estrai_testo_pdf(pdf_path)
+                            if t:
+                                testi.append(t)
+                        if testi:
+                            a["testo_combinato"] = "\n\n---\n\n".join(testi)
+                            log.info(f"  → Testo estratto da PDF: {len(a['testo_combinato'])} chars")
                 a["riassunto"] = genera_riassunto(a)
                 time.sleep(1)
             atti_json_path.write_text(
