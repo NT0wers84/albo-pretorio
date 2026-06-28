@@ -664,9 +664,13 @@ Oggetto: {oggetto}
 Testo allegati:
 {testo_troncato if testo_troncato else "(nessun allegato leggibile)"}
 
-Scrivi un riassunto in italiano semplice, comprensibile a tutti i cittadini, di massimo 150 parole.
-Spiega: di cosa si tratta, cosa cambia per i cittadini, quali importi o decisioni rilevanti sono presenti.
-Usa un tono neutro e informativo. Inizia direttamente con il riassunto, senza intestazioni."""
+Scrivi un riassunto in italiano semplice, comprensibile a tutti i cittadini, di massimo 200 parole.
+
+REGOLE OBBLIGATORIE:
+1. Se nell'atto è presente un impegno di spesa o un importo in euro (€), DEVI citarlo esplicitamente nel riassunto con il valore esatto (es. "impegno di spesa di € 12.500,00").
+2. Se è presente un fornitore o beneficiario del pagamento, citalo.
+3. Spiega brevemente di cosa si tratta e perché il Comune ha preso questa decisione.
+4. Usa un tono neutro e informativo. Inizia direttamente con il riassunto, senza intestazioni o prefazioni."""
 
     try:
         client = Groq(api_key=api_key)
@@ -836,7 +840,24 @@ def main():
     # 3. Filtra atti rilevanti
     atti_rilevanti = applica_filtri(tutti_atti)
 
-    # 4. Identifica solo i nuovi
+    # 4a. Rigenera riassunti mancanti negli atti già salvati
+    atti_json_path = Path("data/atti.json")
+    if atti_json_path.exists():
+        atti_salvati = json.loads(atti_json_path.read_text(encoding="utf-8"))
+        senza_riassunto = [a for a in atti_salvati if not a.get("riassunto")]
+        if senza_riassunto:
+            log.info(f"Rigenerazione riassunti per {len(senza_riassunto)} atti esistenti...")
+            for a in senza_riassunto:
+                log.info(f"  Riassunto: {a.get('tipo','?')} {a.get('numero','?')}")
+                a["riassunto"] = genera_riassunto(a)
+                time.sleep(1)
+            atti_json_path.write_text(
+                json.dumps(atti_salvati, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+            log.info("Riassunti rigenerati e salvati.")
+
+    # 4b. Identifica solo i nuovi
     nuovi_atti = filtra_nuovi(atti_rilevanti)
 
     if not nuovi_atti:
