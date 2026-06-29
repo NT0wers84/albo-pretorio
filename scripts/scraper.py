@@ -862,8 +862,9 @@ def main():
             log.info(f"Rigenerazione riassunti per {len(senza_riassunto)} atti esistenti...")
             for a in senza_riassunto:
                 log.info(f"  Riassunto: {a.get('tipo','?')} {a.get('numero','?')}")
-                # Se testo_combinato è vuoto, prova a rileggerlo dai PDF su disco
+                # Se testo_combinato è vuoto, scarica i PDF (elabora_atto)
                 if not a.get("testo_combinato"):
+                    # Prima prova PDF già su disco
                     cartella = a.get("cartella_locale", "")
                     if cartella and Path(cartella).exists():
                         testi = []
@@ -873,7 +874,15 @@ def main():
                                 testi.append(t)
                         if testi:
                             a["testo_combinato"] = "\n\n---\n\n".join(testi)
-                            log.info(f"  → Testo estratto da PDF: {len(a['testo_combinato'])} chars")
+                            log.info(f"  → Testo da PDF su disco: {len(a['testo_combinato'])} chars")
+                    # Se ancora vuoto e ha URL dettaglio, scarica i PDF dal portale
+                    if not a.get("testo_combinato") and a.get("url_dettaglio"):
+                        log.info(f"  → Scarico PDF dal portale...")
+                        a = elabora_atto(a)
+                        if a.get("testo_combinato"):
+                            log.info(f"  → Testo estratto: {len(a['testo_combinato'])} chars")
+                        else:
+                            log.warning(f"  → Nessun testo estratto dai PDF")
                 a["riassunto"] = genera_riassunto(a)
                 time.sleep(1)
             atti_json_path.write_text(
