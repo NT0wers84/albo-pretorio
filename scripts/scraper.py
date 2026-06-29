@@ -542,9 +542,13 @@ def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup
         f"&{P}fromAction=recuperaDettaglio"
     )
 
+    log.info(f"  URL endpoint: {url_endpoint}")
     try:
         resp = SESSION.get(url_endpoint, timeout=90)
         log.info(f"  Endpoint recuperaDettaglio: status={resp.status_code} len={len(resp.text)} cookie={list(SESSION.cookies.keys())}")
+        log.info(f"  Response headers: {dict(resp.headers)}")
+        log.info(f"  Response body (raw primi 500): {repr(resp.content[:500])}")
+        log.info(f"  URL finale (dopo redirect): {resp.url}")
         if resp.status_code == 200 and len(resp.text) > 200:
             soup2 = BeautifulSoup(resp.text, "html.parser")
             links = _trova_link_pdf(soup2)
