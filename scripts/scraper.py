@@ -957,16 +957,29 @@ def main():
                 a["testo_combinato"] = ""
                 a["allegati"] = []
             log.info(f"--forza-riassunti: rigenerazione forzata per {len(atti_salvati)} atti")
-        senza_riassunto = [a for a in atti_salvati if not a.get("riassunto")]
-        if senza_riassunto:
-            log.info(f"Rigenerazione riassunti per {len(senza_riassunto)} atti esistenti...")
-            for a in senza_riassunto:
-                log.info(f"  Riassunto: {a.get('tipo','?')} {a.get('numero','?')}")
-                # Se testo_combinato è vuoto, scarica i PDF (elabora_atto)
-                if not a.get("testo_combinato"):
-                    # Prima prova PDF già su disco
+        # PDF_VERSIONE: versione del codice di download usata per questo atto.
+        # < 2 = elaborato prima del fix Base64 (onclick atob) → bisogna ritentare
+        #   2 = elaborato col fix Base64 → non ritentare il download
+        PDF_VERSIONE_CORRENTE = 2
+
+        da_riprocessare = [
+            a for a in atti_salvati
+            if not a.get("riassunto") or a.get("pdf_versione", 0) < PDF_VERSIONE_CORRENTE
+        ]
+        if da_riprocessare:
+            log.info(f"Atti da (ri)processare: {len(da_riprocessare)} "
+                     f"(senza riassunto o con pdf_versione < {PDF_VERSIONE_CORRENTE})")
+            for a in da_riprocessare:
+                log.info(f"  Processo: {a.get('tipo','?')} {a.get('numero','?')} "
+                         f"(pdf_v={a.get('pdf_versione',0)}, riassunto={'sì' if a.get('riassunto') else 'no'})")
+
+                # Se testo_combinato è vuoto o versione PDF obsoleta, riscarica i PDF
+                if not a.get("testo_combinato") or a.get("pdf_versione", 0) < PDF_VERSIONE_CORRENTE:
+                    a["testo_combinato"] = ""
+                    a["allegati"] = []
+                    # Prima prova PDF già su disco (solo se versione aggiornata)
                     cartella = a.get("cartella_locale", "")
-                    if cartella and Path(cartella).exists():
+                    if a.get("pdf_versione", 0) >= PDF_VERSIONE_CORRENTE and cartella and Path(cartella).exists():
                         testi = []
                         for pdf_path in sorted(Path(cartella).glob("*.pdf")):
                             t = _estrai_testo_pdf(pdf_path)
@@ -975,7 +988,7 @@ def main():
                         if testi:
                             a["testo_combinato"] = "\n\n---\n\n".join(testi)
                             log.info(f"  → Testo da PDF su disco: {len(a['testo_combinato'])} chars")
-                    # Se ancora vuoto e ha URL dettaglio, scarica i PDF dal portale
+                    # Scarica i PDF dal portale (con il fix Base64)
                     if not a.get("testo_combinato") and a.get("url_dettaglio"):
                         log.info(f"  → Scarico PDF dal portale...")
                         a = elabora_atto(a)
@@ -983,13 +996,21 @@ def main():
                             log.info(f"  → Testo estratto: {len(a['testo_combinato'])} chars")
                         else:
                             log.warning(f"  → Nessun testo estratto dai PDF")
-                a["riassunto"] = genera_riassunto(a)
-                time.sleep(1)
+                    a["pdf_versione"] = PDF_VERSIONE_CORRENTE
+
+                # Genera riassunto solo se c'è testo reale
+                if not a.get("riassunto"):
+                    if a.get("testo_combinato"):
+                        a["riassunto"] = genera_riassunto(a)
+                        time.sleep(1)
+                    else:
+                        log.warning(f"  → Nessun testo disponibile, riassunto saltato")
+
             atti_json_path.write_text(
                 json.dumps(atti_salvati, ensure_ascii=False, indent=2),
                 encoding="utf-8"
             )
-            log.info("Riassunti rigenerati e salvati.")
+            log.info("Atti riprocessati e salvati.")
 
     # 4b. Identifica solo i nuovi
     nuovi_atti = filtra_nuovi(atti_rilevanti)
