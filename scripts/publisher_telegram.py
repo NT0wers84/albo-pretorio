@@ -65,8 +65,8 @@ def formatta_atto(atto: dict, indice: int, totale: int) -> str:
     tipo_display = tipo_raw.title()
 
     numero = atto.get("numero_raw", "?")
-    oggetto = atto.get("oggetto", "")[:200]
-    riassunto = atto.get("riassunto", "")[:600]
+    oggetto = atto.get("oggetto", "")[:300]
+    riassunto = atto.get("riassunto", "")  # nessun troncamento: max 200 parole dal prompt
     url = atto.get("url_dettaglio", "")
 
     # Escape caratteri speciali per MarkdownV2
