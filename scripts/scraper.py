@@ -426,7 +426,7 @@ def elabora_atto(atto: dict) -> dict:
     if link_pdf:
         log.info(f"  → {len(link_pdf)} allegati PDF trovati")
     else:
-        log.warning(f"  → Nessun allegato PDF trovato per {atto.get('numero','?')} — il riassunto sarà incompleto")
+        log.warning(f"  → Nessun allegato PDF trovato per {atto.get('numero','?')}")
 
     atto["allegati"] = []
     testi_pdf = []
@@ -448,6 +448,15 @@ def elabora_atto(atto: dict) -> dict:
             "percorso_locale": str(percorso),
             "caratteri": len(testo),
         })
+
+    # Se non ci sono PDF, estrai testo inline dall'HTML della pagina di dettaglio.
+    # Il portlet JCityGov per alcuni atti (delibere, ordinanze) incorpora il testo
+    # direttamente nella pagina invece di allegare un PDF separato.
+    if not testi_pdf and soup:
+        testo_inline = _estrai_testo_inline_html(soup)
+        if testo_inline:
+            log.info(f"  → Testo inline estratto dall'HTML: {len(testo_inline)} chars")
+            testi_pdf.append(testo_inline)
 
     atto["testo_combinato"] = "\n\n---\n\n".join(testi_pdf)
     return atto
@@ -513,6 +522,51 @@ def _ottieni_p_auth_fresco(url_dettaglio: str) -> str:
     return ""
 
 
+def _estrai_testo_inline_html(soup: BeautifulSoup) -> str:
+    """
+    Estrae il testo del corpo dell'atto quando è incorporato direttamente nell'HTML
+    della pagina di dettaglio (senza PDF allegato).
+
+    Il portlet JCityGov per alcuni atti (delibere di giunta, ordinanze) include
+    il testo dell'atto nel portlet stesso. Lo identifica dal div con classe
+    'jcitygov-portlet-content' o simile, escludendo header/footer/nav.
+    """
+    # Rimuovi script, style, nav, header, footer
+    for tag in soup(["script", "style", "nav", "header", "footer", "link", "meta"]):
+        tag.decompose()
+
+    # Cerca prima il contenitore specifico del portlet
+    contenuto = None
+    for selettore in [
+        "div.portlet-body",
+        "div.portlet-content",
+        "div#portlet_jcitygovalbopubblicazioni_WAR_jcitygovalbiportlet",
+        "div.jcitygov",
+        "section.portlet",
+        "div.container",
+        "div#content",
+        "main",
+        "body",
+    ]:
+        contenuto = soup.select_one(selettore)
+        if contenuto:
+            break
+
+    if not contenuto:
+        contenuto = soup
+
+    testo = contenuto.get_text(separator="\n", strip=True)
+
+    # Filtra righe minime (taglia boilerplate navigazione)
+    righe = [r.strip() for r in testo.splitlines() if len(r.strip()) > 20]
+    testo_pulito = "\n".join(righe)
+
+    # Se rimangono almeno 200 caratteri di testo, vale la pena usarlo
+    if len(testo_pulito) >= 200:
+        return testo_pulito
+    return ""
+
+
 def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup) -> list[str]:
     """
     Strategia principale: usa l'endpoint Liferay recuperaDettaglio per ottenere
@@ -546,6 +600,22 @@ def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup
     log.info(f"  p_auth usato: {p_auth}")
 
     # Endpoint 1: recuperaDettaglio — restituisce HTML della scheda atto con link allegati
+    # Proviamo sia con p_p_state=normal (visto su altri comuni JCityGov) che pop_up
+    url_endpoint_normal = (
+        f"{BASE_URL}/web/trasparenza/papca-ap"
+        f"?p_p_id={PORTLET}"
+        f"&p_p_lifecycle=2"
+        f"&p_p_state=normal"
+        f"&p_p_mode=view"
+        f"&p_p_resource_id=recuperaDettaglio"
+        f"&p_p_cacheability=cacheLevelPage"
+        f"&p_p_col_id=column-1"
+        f"&p_p_col_count=1"
+        f"&p_auth={p_auth}"
+        f"&{P}id={id_atto}"
+        f"&{P}action=mostraDettaglio"
+        f"&{P}fromAction=recuperaDettaglio"
+    )
     url_endpoint = (
         f"{BASE_URL}/web/trasparenza/papca-ap"
         f"?p_p_id={PORTLET}"
@@ -560,51 +630,43 @@ def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup
         f"&{P}fromAction=recuperaDettaglio"
     )
 
-    log.info(f"  URL endpoint: {url_endpoint}")
+    # Prova prima con state=normal (come altri comuni JCityGov), poi pop_up come fallback
+    for url_endpoint_tentativo, stato_desc in [
+        (url_endpoint_normal, "normal"),
+        (url_endpoint, "pop_up"),
+    ]:
+        log.info(f"  Provo recuperaDettaglio state={stato_desc}: {url_endpoint_tentativo[:120]}")
+        try:
+            headers_extra = {"Referer": url_dettaglio}
+            resp = SESSION.get(url_endpoint_tentativo, timeout=90, headers=headers_extra)
+            log.info(f"  recuperaDettaglio [{stato_desc}]: status={resp.status_code} len={len(resp.text)}")
+            if resp.status_code == 200 and len(resp.text) > 200:
+                soup2 = BeautifulSoup(resp.text, "html.parser")
+                links = _trova_link_pdf(soup2)
+                if links:
+                    log.info(f"  Trovati {len(links)} PDF via recuperaDettaglio [{stato_desc}]")
+                    return links
+                log.info(f"  Risposta [{stato_desc}] (primi 300): {resp.text[:300]}")
+            else:
+                log.info(f"  recuperaDettaglio [{stato_desc}]: risposta vuota (len={len(resp.text)})")
+        except Exception as e:
+            log.warning(f"  recuperaDettaglio [{stato_desc}] fallito: {e}")
+
+    # Nessuno dei due ha funzionato — prova con dati body/form POST
     try:
-        resp = SESSION.get(url_endpoint, timeout=90)
-        log.info(f"  Endpoint recuperaDettaglio: status={resp.status_code} len={len(resp.text)} cookie={list(SESSION.cookies.keys())}")
-        log.info(f"  Response headers: {dict(resp.headers)}")
-        log.info(f"  Response body (raw primi 500): {repr(resp.content[:500])}")
-        log.info(f"  URL finale (dopo redirect): {resp.url}")
+        # Alcuni portlet Liferay lifecycle=2 richiedono POST
+        resp = SESSION.post(url_endpoint, timeout=90, headers={"Referer": url_dettaglio},
+                            data={f"{P}id": id_atto, f"{P}action": "mostraDettaglio"})
+        log.info(f"  recuperaDettaglio POST: status={resp.status_code} len={len(resp.text)}")
         if resp.status_code == 200 and len(resp.text) > 200:
             soup2 = BeautifulSoup(resp.text, "html.parser")
             links = _trova_link_pdf(soup2)
             if links:
-                log.info(f"  Trovati {len(links)} PDF via endpoint recuperaDettaglio")
+                log.info(f"  Trovati {len(links)} PDF via POST")
                 return links
-            log.info(f"  Risposta endpoint (primi 300 chars): {resp.text[:300]}")
-        elif resp.status_code == 200 and len(resp.text) <= 200:
-            log.warning(f"  Risposta vuota dall'endpoint: '{resp.text[:100]}' — cookie mancanti?")
-            # Cerca anche pattern downloadAllegato direttamente nel testo
-            ids_allegati = re.findall(r"[_&]id=(\d+).*?downloadAllegato|downloadAllegato.*?[_&]id=(\d+)", resp.text)
-            if not ids_allegati:
-                # Cerca pattern più semplice: id= nei link download
-                ids_allegati = re.findall(r"downloadAllegato[^\"']*[_&]id=(\d+)", resp.text)
-            urls = []
-            for id_all in ids_allegati:
-                id_val = id_all if isinstance(id_all, str) else (id_all[0] or id_all[1])
-                if id_val:
-                    url_pdf = (
-                        f"{BASE_URL}/web/trasparenza/papca-ap"
-                        f"?p_p_id={PORTLET}"
-                        f"&p_p_lifecycle=2"
-                        f"&p_p_state=pop_up"
-                        f"&p_p_mode=view"
-                        f"&p_p_resource_id=downloadAllegato"
-                        f"&p_p_cacheability=cacheLevelPage"
-                        f"&{P}downloadSigned=false"
-                        f"&{P}id={id_val}"
-                        f"&{P}action=mostraDettaglio"
-                        f"&{P}fromAction=recuperaDettaglio"
-                    )
-                    if url_pdf not in urls:
-                        urls.append(url_pdf)
-            if urls:
-                log.debug(f"  Trovati {len(urls)} PDF via ID allegato in endpoint")
-                return urls
     except Exception as e:
-        log.warning(f"  Endpoint recuperaDettaglio fallito: {e}")
+        log.warning(f"  recuperaDettaglio POST fallito: {e}")
+
 
     # Fallback: cerca nell'HTML statico già scaricato
     links = _trova_link_pdf(soup_fallback)
