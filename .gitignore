@@ -1,0 +1,14 @@
+# PDF allegati — scaricati temporaneamente durante il workflow,
+# non devono essere committati nel repo (troppo pesanti, usa solo disco runner)
+data/allegati/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# macOS
+.DS_Store
