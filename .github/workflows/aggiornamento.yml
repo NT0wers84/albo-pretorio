@@ -42,7 +42,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           for i in 1 2 3; do
-            python scripts/scraper.py --forza-riassunti && break
+            python scripts/scraper.py && break
             echo "Tentativo $i fallito, riprovo tra 60 secondi..."
             sleep 60
           done

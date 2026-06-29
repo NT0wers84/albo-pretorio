@@ -479,20 +479,6 @@ def _ottieni_p_auth_fresco(url_dettaglio: str) -> str:
             log.debug(f"  p_auth fresco: status {resp.status_code} da {url_dettaglio}")
             return ""
         html = resp.text
-        # LOG DIAGNOSTICO: mostra l'intera allegati-table per vedere i link reali
-        log.info(f"  [DIAG] Pagina dettaglio status={resp.status_code} len={len(html)} url={url_dettaglio[:80]}")
-        import re as _re2
-        # Mostra l'intera allegati-table (fino a 3000 chars)
-        tbl_start = html.lower().find("allegati-table")
-        if tbl_start >= 0:
-            tbl_snippet = html[max(0, tbl_start - 50):tbl_start + 3000]
-            log.info(f"  [DIAG] allegati-table (3000 chars): {tbl_snippet!r}")
-        # Cerca tutti gli href con download/allegat/pdf nell'HTML
-        hrefs = _re2.findall(r'href=["\']([^"\']*(?:download|allegat|\.pdf)[^"\']*)["\']', html, _re2.I)
-        log.info(f"  [DIAG] href download/allegat/pdf trovati: {hrefs[:15]}")
-        # Cerca data-id attributi
-        data_ids = _re2.findall(r'data-id[^=]*=["\']([\d]+)["\']', html, _re2.I)
-        log.info(f"  [DIAG] data-id* trovati: {data_ids[:20]}")
 
         # 1. Meta tag
         m = re.search(r'<meta[^>]+name=["\']p_auth["\'][^>]+content=["\']([^"\']+)["\']', html, re.I)
@@ -565,128 +551,79 @@ def _estrai_testo_inline_html(soup: BeautifulSoup) -> str:
 
 def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup) -> list[str]:
     """
-    Strategia principale: usa l'endpoint Liferay recuperaDettaglio per ottenere
-    la lista degli allegati senza dipendere da JavaScript.
+    Estrae i link agli allegati PDF dalla pagina di dettaglio.
 
-    L'URL di dettaglio ha la forma:
-      /papca/display/5473610?p_auth=XXX&p_p_state=pop_up
-    L'ID atto (5473610) serve per costruire l'URL dell'endpoint resource:
-      /papca-ap?p_p_id=...&p_p_lifecycle=2&p_p_resource_id=recuperaDettaglio&...&_..._id=5473610
+    JCityGov (Liferay) include la allegati-table nell'HTML statico della pagina
+    di dettaglio; i link di download sono codificati in Base64 nell'attributo
+    onclick: window.open(atob('BASE64_URL'), '_blank')
 
-    Se non trova nulla, fallback sulla ricerca nell'HTML statico.
+    L'endpoint recuperaDettaglio (lifecycle=2) restituisce body vuoto (len=0)
+    per richieste non-iframe — non utilizzabile da scraper HTTP.
     """
-    # Estrai ID atto dall'URL dettaglio (numero dopo /display/)
-    id_match = re.search(r"/display/(\d+)", url_dettaglio)
-    if not id_match:
-        log.debug("  ID atto non trovato nell'URL dettaglio, uso fallback HTML")
-        return _trova_link_pdf(soup_fallback)
-
-    id_atto = id_match.group(1)
-
-    PORTLET = "jcitygovalbopubblicazioni_WAR_jcitygovalbiportlet"
-    P = f"_{PORTLET}_"
-
-    # Ottieni p_auth fresco visitando la pagina di dettaglio (il token nel URL salvato
-    # può essere scaduto se il run è diverso dalla sessione originale di scraping)
-    p_auth = _ottieni_p_auth_fresco(url_dettaglio)
-    if not p_auth:
-        # Fallback: usa quello nell'URL (potrebbe essere stale)
-        auth_match = re.search(r"p_auth=([^&]+)", url_dettaglio)
-        p_auth = auth_match.group(1) if auth_match else ""
-    log.info(f"  p_auth usato: {p_auth}")
-
-    # Endpoint 1: recuperaDettaglio — restituisce HTML della scheda atto con link allegati
-    # Proviamo sia con p_p_state=normal (visto su altri comuni JCityGov) che pop_up
-    url_endpoint_normal = (
-        f"{BASE_URL}/web/trasparenza/papca-ap"
-        f"?p_p_id={PORTLET}"
-        f"&p_p_lifecycle=2"
-        f"&p_p_state=normal"
-        f"&p_p_mode=view"
-        f"&p_p_resource_id=recuperaDettaglio"
-        f"&p_p_cacheability=cacheLevelPage"
-        f"&p_p_col_id=column-1"
-        f"&p_p_col_count=1"
-        f"&p_auth={p_auth}"
-        f"&{P}id={id_atto}"
-        f"&{P}action=mostraDettaglio"
-        f"&{P}fromAction=recuperaDettaglio"
-    )
-    url_endpoint = (
-        f"{BASE_URL}/web/trasparenza/papca-ap"
-        f"?p_p_id={PORTLET}"
-        f"&p_p_lifecycle=2"
-        f"&p_p_state=pop_up"
-        f"&p_p_mode=view"
-        f"&p_p_resource_id=recuperaDettaglio"
-        f"&p_p_cacheability=cacheLevelPage"
-        f"&p_auth={p_auth}"
-        f"&{P}id={id_atto}"
-        f"&{P}action=mostraDettaglio"
-        f"&{P}fromAction=recuperaDettaglio"
-    )
-
-    # Prova prima con state=normal (come altri comuni JCityGov), poi pop_up come fallback
-    for url_endpoint_tentativo, stato_desc in [
-        (url_endpoint_normal, "normal"),
-        (url_endpoint, "pop_up"),
-    ]:
-        log.info(f"  Provo recuperaDettaglio state={stato_desc}: {url_endpoint_tentativo[:120]}")
-        try:
-            headers_extra = {"Referer": url_dettaglio}
-            resp = SESSION.get(url_endpoint_tentativo, timeout=90, headers=headers_extra)
-            log.info(f"  recuperaDettaglio [{stato_desc}]: status={resp.status_code} len={len(resp.text)}")
-            if resp.status_code == 200 and len(resp.text) > 200:
-                soup2 = BeautifulSoup(resp.text, "html.parser")
-                links = _trova_link_pdf(soup2)
-                if links:
-                    log.info(f"  Trovati {len(links)} PDF via recuperaDettaglio [{stato_desc}]")
-                    return links
-                log.info(f"  Risposta [{stato_desc}] (primi 300): {resp.text[:300]}")
-            else:
-                log.info(f"  recuperaDettaglio [{stato_desc}]: risposta vuota (len={len(resp.text)})")
-        except Exception as e:
-            log.warning(f"  recuperaDettaglio [{stato_desc}] fallito: {e}")
-
-    # Nessuno dei due ha funzionato — prova con dati body/form POST
-    try:
-        # Alcuni portlet Liferay lifecycle=2 richiedono POST
-        resp = SESSION.post(url_endpoint, timeout=90, headers={"Referer": url_dettaglio},
-                            data={f"{P}id": id_atto, f"{P}action": "mostraDettaglio"})
-        log.info(f"  recuperaDettaglio POST: status={resp.status_code} len={len(resp.text)}")
-        if resp.status_code == 200 and len(resp.text) > 200:
-            soup2 = BeautifulSoup(resp.text, "html.parser")
-            links = _trova_link_pdf(soup2)
-            if links:
-                log.info(f"  Trovati {len(links)} PDF via POST")
-                return links
-    except Exception as e:
-        log.warning(f"  recuperaDettaglio POST fallito: {e}")
-
-
-    # Fallback: cerca nell'HTML statico già scaricato
+    # La soup_fallback è già la pagina di dettaglio scaricata da elabora_atto.
+    # Cerca i link Base64 direttamente in essa.
     links = _trova_link_pdf(soup_fallback)
     if not links:
-        log.debug("  Nessun PDF trovato né via endpoint né via HTML statico")
+        log.debug("  Nessun allegato PDF trovato nell'HTML della pagina di dettaglio")
     return links
 
 
 def _trova_link_pdf(soup: BeautifulSoup) -> list[str]:
     """
     Cerca i link agli allegati PDF nella pagina di dettaglio.
-    JCityGov usa diversi pattern:
-      - Link diretti a file .pdf
-      - Endpoint Liferay: p_p_resource_id=downloadAllegato&id=XXX
-      - Link con testo "Scarica" o icona PDF
+
+    JCityGov (Liferay) codifica le URL di download in Base64 all'interno
+    dell'attributo onclick dei tag <a>:
+      onclick="...window.open(atob('BASE64_URL'), '_blank')..."
+    L'href è sempre "javascript:void(0)" — inutile per il download.
+
+    Cerca anche i pattern tradizionali come fallback per altri portali.
     """
+    import base64
+
     url_pdf = []
     visti = set()
 
+    # ── Pattern principale: Base64 in onclick (JCityGov Liferay) ────────────
+    # Raccoglie tutte le URL decodificate, poi deuplica tenendo solo
+    # downloadSigned=false quando disponibile per lo stesso ID allegato.
+    url_per_id: dict[str, str] = {}   # id_allegato → url preferita (unsigned)
+
+    for tag in soup.find_all("a", onclick=True):
+        onclick = tag.get("onclick", "")
+        matches = re.findall(r"atob\('([A-Za-z0-9+/=]+)'\)", onclick)
+        for b64 in matches:
+            try:
+                url = base64.b64decode(b64).decode("utf-8")
+                if "downloadAllegato" not in url:
+                    continue
+                # Estrai l'ID allegato Liferay dal parametro _..._id=XXXXX
+                id_match = re.search(r"_jcitygovalbopubblicazioni[^=]*_id=(\d+)", url)
+                id_all = id_match.group(1) if id_match else url
+                if "downloadSigned=false" in url:
+                    # Versione non firmata: ha priorità
+                    url_per_id[id_all] = url
+                elif id_all not in url_per_id:
+                    # Versione firmata: solo se non abbiamo ancora quella non firmata
+                    url_per_id[id_all] = url
+            except Exception:
+                pass
+
+    for url in url_per_id.values():
+        if url not in visti:
+            url_pdf.append(url)
+            visti.add(url)
+
+    if url_pdf:
+        log.info(f"  Trovati {len(url_pdf)} allegati via Base64 onclick")
+        return url_pdf
+
+    # ── Fallback: href tradizionali (altri portali o strutture alternative) ──
     for tag in soup.find_all("a", href=True):
         href = tag["href"]
         testo = tag.get_text(strip=True).lower()
 
-        # Pattern 1: href diretto a PDF
+        # Pattern: href diretto a PDF
         if href.lower().endswith(".pdf"):
             url = href if href.startswith("http") else BASE_URL + href
             if url not in visti:
@@ -694,7 +631,7 @@ def _trova_link_pdf(soup: BeautifulSoup) -> list[str]:
                 visti.add(url)
             continue
 
-        # Pattern 2: endpoint Liferay downloadAllegato
+        # Pattern: endpoint Liferay downloadAllegato
         if "downloadAllegato" in href or "download" in href.lower():
             url = href if href.startswith("http") else BASE_URL + href
             if url not in visti:
@@ -702,7 +639,7 @@ def _trova_link_pdf(soup: BeautifulSoup) -> list[str]:
                 visti.add(url)
             continue
 
-        # Pattern 3: link con testo tipico degli allegati
+        # Pattern: link con testo tipico degli allegati
         if any(kw in testo for kw in ["scarica", "allegato", "download", "pdf"]):
             url = href if href.startswith("http") else BASE_URL + href
             if url not in visti and url != BASE_URL:
