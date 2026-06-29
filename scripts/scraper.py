@@ -479,24 +479,20 @@ def _ottieni_p_auth_fresco(url_dettaglio: str) -> str:
             log.debug(f"  p_auth fresco: status {resp.status_code} da {url_dettaglio}")
             return ""
         html = resp.text
-        # LOG DIAGNOSTICO: mostra parte rilevante dell'HTML per capire struttura allegati
+        # LOG DIAGNOSTICO: mostra l'intera allegati-table per vedere i link reali
         log.info(f"  [DIAG] Pagina dettaglio status={resp.status_code} len={len(html)} url={url_dettaglio[:80]}")
         import re as _re2
-        # Mostra il corpo DOPO </head> — qui c'è il portlet con i dati JS
-        body_start = html.lower().find("</head>")
-        if body_start >= 0:
-            body_snippet = html[body_start:body_start + 3000]
-            log.info(f"  [DIAG] HTML dopo </head> (3000 chars): {body_snippet!r}")
-        # Cerca keyword allegati in tutto l'HTML e mostra contesto
-        for kw in ["allegat", "downloadAllegato", "recuperaDettaglio", "portletNamespace", "jcitygov"]:
-            idx = html.lower().find(kw.lower())
-            if idx >= 0:
-                snippet = html[max(0, idx-100):idx+400]
-                log.info(f"  [DIAG] keyword '{kw}' pos={idx}: {snippet!r}")
-                break  # mostra solo il primo match utile
-        # Cerca URL AJAX/API nel JS inline
-        ajax_urls = _re2.findall(r'["\']([^"\']*(?:allegat|download|recupera|papca)[^"\']*)["\']', html, _re2.I)
-        log.info(f"  [DIAG] URL/ref AJAX trovati: {ajax_urls[:10]}")
+        # Mostra l'intera allegati-table (fino a 3000 chars)
+        tbl_start = html.lower().find("allegati-table")
+        if tbl_start >= 0:
+            tbl_snippet = html[max(0, tbl_start - 50):tbl_start + 3000]
+            log.info(f"  [DIAG] allegati-table (3000 chars): {tbl_snippet!r}")
+        # Cerca tutti gli href con download/allegat/pdf nell'HTML
+        hrefs = _re2.findall(r'href=["\']([^"\']*(?:download|allegat|\.pdf)[^"\']*)["\']', html, _re2.I)
+        log.info(f"  [DIAG] href download/allegat/pdf trovati: {hrefs[:15]}")
+        # Cerca data-id attributi
+        data_ids = _re2.findall(r'data-id[^=]*=["\']([\d]+)["\']', html, _re2.I)
+        log.info(f"  [DIAG] data-id* trovati: {data_ids[:20]}")
 
         # 1. Meta tag
         m = re.search(r'<meta[^>]+name=["\']p_auth["\'][^>]+content=["\']([^"\']+)["\']', html, re.I)
