@@ -91,6 +91,23 @@ SESSION.mount("https://", HTTPAdapter(max_retries=_retry))
 SESSION.mount("http://", HTTPAdapter(max_retries=_retry))
 
 
+def _init_sessione() -> None:
+    """
+    Visita la pagina principale del portale per ottenere i cookie di sessione Liferay
+    (JSESSIONID, GUEST_LANGUAGE_ID, ecc.) necessari per accedere agli endpoint
+    recuperaDettaglio e downloadAllegato.
+    """
+    try:
+        # 1. Homepage del portale trasparenza
+        r1 = SESSION.get(f"{BASE_URL}/web/trasparenza", timeout=30)
+        log.info(f"Sessione inizializzata: {r1.status_code}, cookie: {list(SESSION.cookies.keys())}")
+        # 2. Pagina dell'albo (stabilisce il contesto del portlet)
+        r2 = SESSION.get(ALBO_URL, timeout=30)
+        log.info(f"Contesto portlet albo: {r2.status_code}, cookie: {list(SESSION.cookies.keys())}")
+    except Exception as e:
+        log.warning(f"Inizializzazione sessione fallita: {e}")
+
+
 def _fetch(url: str) -> str:
     """Scarica una pagina con requests (nessun JS necessario per PAPCA)."""
     resp = SESSION.get(url, timeout=90)
@@ -479,7 +496,7 @@ def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup
 
     try:
         resp = SESSION.get(url_endpoint, timeout=90)
-        log.info(f"  Endpoint recuperaDettaglio: status={resp.status_code} len={len(resp.text)}")
+        log.info(f"  Endpoint recuperaDettaglio: status={resp.status_code} len={len(resp.text)} cookie={list(SESSION.cookies.keys())}")
         if resp.status_code == 200 and len(resp.text) > 200:
             soup2 = BeautifulSoup(resp.text, "html.parser")
             links = _trova_link_pdf(soup2)
@@ -487,6 +504,8 @@ def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup
                 log.info(f"  Trovati {len(links)} PDF via endpoint recuperaDettaglio")
                 return links
             log.info(f"  Risposta endpoint (primi 300 chars): {resp.text[:300]}")
+        elif resp.status_code == 200 and len(resp.text) <= 200:
+            log.warning(f"  Risposta vuota dall'endpoint: '{resp.text[:100]}' — cookie mancanti?")
             # Cerca anche pattern downloadAllegato direttamente nel testo
             ids_allegati = re.findall(r"[_&]id=(\d+).*?downloadAllegato|downloadAllegato.*?[_&]id=(\d+)", resp.text)
             if not ids_allegati:
@@ -839,6 +858,9 @@ def main():
     log.info("ALBO PRETORIO — Comune di Pieve Emanuele")
     log.info(f"Esecuzione: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info("=" * 60)
+
+    # 0. Inizializza sessione con cookie Liferay (necessari per endpoint allegati)
+    _init_sessione()
 
     # 1. Scraping lista completa
     tutti_atti = scrape_lista_atti()
