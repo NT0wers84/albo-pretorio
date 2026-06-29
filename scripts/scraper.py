@@ -470,6 +470,12 @@ def _ottieni_p_auth_fresco(url_dettaglio: str) -> str:
             log.debug(f"  p_auth fresco: status {resp.status_code} da {url_dettaglio}")
             return ""
         html = resp.text
+        # LOG DIAGNOSTICO: mostra HTML della pagina popup per capire la struttura
+        log.info(f"  [DIAG] Pagina dettaglio status={resp.status_code} len={len(html)} url={url_dettaglio[:80]}")
+        log.info(f"  [DIAG] HTML primi 1500 chars: {html[:1500]!r}")
+        import re as _re2
+        all_links = _re2.findall(r'href=["\']([^"\']+)["\']', html)
+        log.info(f"  [DIAG] Tutti i link trovati: {all_links[:20]}")
 
         # 1. Meta tag
         m = re.search(r'<meta[^>]+name=["\']p_auth["\'][^>]+content=["\']([^"\']+)["\']', html, re.I)
