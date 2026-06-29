@@ -854,6 +854,12 @@ def _genera_id(atto: dict) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--forza-riassunti", action="store_true",
+                        help="Rigenera riassunti e PDF per tutti gli atti esistenti")
+    args, _ = parser.parse_known_args()
+
     log.info("=" * 60)
     log.info("ALBO PRETORIO — Comune di Pieve Emanuele")
     log.info(f"Esecuzione: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -875,10 +881,17 @@ def main():
     # 3. Filtra atti rilevanti
     atti_rilevanti = applica_filtri(tutti_atti)
 
-    # 4a. Rigenera riassunti mancanti negli atti già salvati
+    # 4a. Rigenera riassunti mancanti (o tutti se --forza-riassunti)
     atti_json_path = Path("data/atti.json")
     if atti_json_path.exists():
         atti_salvati = json.loads(atti_json_path.read_text(encoding="utf-8"))
+        if args.forza_riassunti:
+            # Svuota testo e allegati così li riscarica dal portale
+            for a in atti_salvati:
+                a["riassunto"] = ""
+                a["testo_combinato"] = ""
+                a["allegati"] = []
+            log.info(f"--forza-riassunti: rigenerazione forzata per {len(atti_salvati)} atti")
         senza_riassunto = [a for a in atti_salvati if not a.get("riassunto")]
         if senza_riassunto:
             log.info(f"Rigenerazione riassunti per {len(senza_riassunto)} atti esistenti...")
