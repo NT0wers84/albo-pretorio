@@ -453,6 +453,48 @@ def elabora_atto(atto: dict) -> dict:
     return atto
 
 
+def _ottieni_p_auth_fresco(url_dettaglio: str) -> str:
+    """
+    Visita la pagina di dettaglio dell'atto per estrarre un p_auth token fresco.
+    Liferay genera il token lato server per ogni sessione; il token salvato nello
+    url_dettaglio può essere scaduto se usato in un run diverso.
+
+    Strategie di estrazione (in ordine):
+    1. Meta tag <meta name="p_auth" content="...">
+    2. Pattern Liferay.authToken = "..." nello script inline
+    3. p_auth= in qualsiasi link interno alla pagina
+    """
+    try:
+        resp = SESSION.get(url_dettaglio, timeout=30)
+        if resp.status_code != 200:
+            log.debug(f"  p_auth fresco: status {resp.status_code} da {url_dettaglio}")
+            return ""
+        html = resp.text
+
+        # 1. Meta tag
+        m = re.search(r'<meta[^>]+name=["\']p_auth["\'][^>]+content=["\']([^"\']+)["\']', html, re.I)
+        if m:
+            log.debug(f"  p_auth fresco da meta tag: {m.group(1)}")
+            return m.group(1)
+
+        # 2. Liferay.authToken JS
+        m = re.search(r'Liferay\.authToken\s*=\s*["\']([^"\']+)["\']', html)
+        if m:
+            log.debug(f"  p_auth fresco da Liferay.authToken: {m.group(1)}")
+            return m.group(1)
+
+        # 3. p_auth= in link interni
+        m = re.search(r'p_auth=([A-Za-z0-9_\-]+)', html)
+        if m:
+            log.debug(f"  p_auth fresco da link: {m.group(1)}")
+            return m.group(1)
+
+        log.debug("  p_auth fresco: non trovato nella pagina di dettaglio")
+    except Exception as e:
+        log.debug(f"  p_auth fresco: errore {e}")
+    return ""
+
+
 def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup) -> list[str]:
     """
     Strategia principale: usa l'endpoint Liferay recuperaDettaglio per ottenere
@@ -472,12 +514,18 @@ def _trova_link_pdf_da_endpoint(url_dettaglio: str, soup_fallback: BeautifulSoup
         return _trova_link_pdf(soup_fallback)
 
     id_atto = id_match.group(1)
-    # Estrai p_auth dall'URL (token di sessione Liferay)
-    auth_match = re.search(r"p_auth=([^&]+)", url_dettaglio)
-    p_auth = auth_match.group(1) if auth_match else ""
 
     PORTLET = "jcitygovalbopubblicazioni_WAR_jcitygovalbiportlet"
     P = f"_{PORTLET}_"
+
+    # Ottieni p_auth fresco visitando la pagina di dettaglio (il token nel URL salvato
+    # può essere scaduto se il run è diverso dalla sessione originale di scraping)
+    p_auth = _ottieni_p_auth_fresco(url_dettaglio)
+    if not p_auth:
+        # Fallback: usa quello nell'URL (potrebbe essere stale)
+        auth_match = re.search(r"p_auth=([^&]+)", url_dettaglio)
+        p_auth = auth_match.group(1) if auth_match else ""
+    log.info(f"  p_auth usato: {p_auth}")
 
     # Endpoint 1: recuperaDettaglio — restituisce HTML della scheda atto con link allegati
     url_endpoint = (
