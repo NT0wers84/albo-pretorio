@@ -749,8 +749,25 @@ def _estrai_testo_pdf(percorso: Path) -> str:
         with pdfplumber.open(percorso) as pdf:
             pagine_testo = []
             for pagina in pdf.pages:
+                parti = []
+
+                # Testo normale
                 t = pagina.extract_text() or ""
-                pagine_testo.append(t)
+                if t:
+                    parti.append(t)
+
+                # Tabelle: pdfplumber le estrae separatamente dal testo scorrevole.
+                # Fondamentale per catturare importi e fornitori in tabelle strutturate
+                # (es. "Di impegnare € 2.580,00 a favore di...").
+                tabelle = pagina.extract_tables() or []
+                for tabella in tabelle:
+                    for riga in tabella:
+                        celle = [str(c).strip() if c else "" for c in riga]
+                        riga_testo = " | ".join(c for c in celle if c)
+                        if riga_testo:
+                            parti.append(riga_testo)
+
+                pagine_testo.append("\n".join(parti))
 
             testo = "\n".join(pagine_testo).strip()
             media_caratteri = len(testo) / max(len(pagine_testo), 1)
