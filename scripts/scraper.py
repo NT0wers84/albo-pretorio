@@ -121,9 +121,22 @@ def _fetch(url: str) -> str:
 
 def scrape_lista_atti() -> list[dict]:
     """
-    Legge tutte le pagine dell'albo pretorio e restituisce la lista grezza
+    Legge le pagine dell'albo pretorio e restituisce la lista grezza
     degli atti con: numero, tipo, oggetto, date, url_dettaglio.
+
+    Ottimizzazione: si ferma appena trova una pagina in cui tutti gli atti
+    sono già presenti in atti.json — con trigger giornaliero i nuovi atti
+    sono sempre in cima, quindi di solito basta la prima pagina.
     """
+    # Carica l'archivio esistente per lo stop anticipato
+    atti_noti: set[tuple] = set()
+    if ATTI_JSON.exists():
+        try:
+            archivio = json.loads(ATTI_JSON.read_text(encoding="utf-8"))
+            atti_noti = {(a.get("numero_raw", ""), a.get("oggetto", "")) for a in archivio}
+        except Exception:
+            pass
+
     atti = []
     url_corrente = ALBO_URL
     pagina = 1
@@ -142,7 +155,7 @@ def scrape_lista_atti() -> list[dict]:
         # Cerca la tabella degli atti
         tabella = soup.find("table")
         if not tabella:
-            log.warning(f"Nessuna tabella trovata a pagina {pagina} anche dopo JS. Fine elenco.")
+            log.warning(f"Nessuna tabella trovata a pagina {pagina}. Fine elenco.")
             break
 
         # Intestazioni per mappare le colonne
@@ -153,6 +166,7 @@ def scrape_lista_atti() -> list[dict]:
         idx = _trova_indici_colonne(intestazioni)
 
         righe = tabella.find_all("tr")[1:]  # salta intestazione
+        nuovi_in_pagina = 0
         for riga in righe:
             celle = riga.find_all("td")
             if len(celle) < max(idx.values()) + 1:
@@ -161,6 +175,15 @@ def scrape_lista_atti() -> list[dict]:
             atto = _estrai_atto_da_riga(celle, idx, soup, riga)
             if atto:
                 atti.append(atto)
+                chiave = (atto.get("numero_raw", ""), atto.get("oggetto", ""))
+                if chiave not in atti_noti:
+                    nuovi_in_pagina += 1
+
+        # Stop anticipato: se in questa pagina non c'è nessun atto nuovo,
+        # quelli successivi saranno ancora più vecchi — inutile continuare.
+        if atti_noti and nuovi_in_pagina == 0:
+            log.info(f"  Pagina {pagina}: tutti gli atti già noti, stop paginazione")
+            break
 
         # Paginazione: cerca il link "Avanti"
         url_corrente = _trova_link_avanti(soup, url_corrente)
