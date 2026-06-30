@@ -650,29 +650,54 @@ def _trova_link_pdf(soup: BeautifulSoup) -> list[str]:
 
 
 def _scarica_pdf(url: str, destinazione: Path) -> bool:
-    """Scarica un PDF e lo salva in destinazione. Restituisce True se ok."""
+    """
+    Scarica un allegato e lo salva in destinazione.
+    Restituisce True se il file è un PDF leggibile, False altrimenti.
+
+    JCityGov può restituire file .p7m (buste CAdES firmate digitalmente)
+    che contengono un PDF dentro ma non sono direttamente leggibili con
+    pdfplumber. Questi vengono riconosciuti dal magic byte e scartati.
+    """
     if destinazione.exists():
-        log.debug(f"PDF già presente, salto: {destinazione.name}")
-        return True
+        # Verifica che il file già su disco sia un PDF valido
+        with open(destinazione, "rb") as f:
+            magic = f.read(4)
+        if magic == b"%PDF":
+            log.debug(f"PDF già presente, salto: {destinazione.name}")
+            return True
+        else:
+            log.debug(f"File già presente ma non PDF, rimuovo: {destinazione.name}")
+            destinazione.unlink()
+
     try:
         resp = SESSION.get(url, timeout=60, stream=True)
         resp.raise_for_status()
 
-        # Verifica che sia davvero un PDF
-        content_type = resp.headers.get("Content-Type", "")
-        if "pdf" not in content_type.lower() and not url.lower().endswith(".pdf"):
-            # Tenta comunque: a volte JCityGov non imposta correttamente il Content-Type
-            pass
+        # Leggi i primi byte per verificare il magic number prima di salvare
+        primi_chunk = b""
+        chunks = []
+        for chunk in resp.iter_content(chunk_size=8192):
+            chunks.append(chunk)
+            if len(primi_chunk) < 4:
+                primi_chunk += chunk
+
+        magic = primi_chunk[:4]
+        if magic != b"%PDF":
+            # File non-PDF (es. .p7m, .xml, immagine): scarta silenziosamente
+            content_type = resp.headers.get("Content-Type", "")
+            log.debug(f"  ⊘ Allegato non-PDF scartato: {destinazione.name} "
+                      f"(magic={magic!r}, Content-Type={content_type})")
+            return False
 
         with open(destinazione, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
+            for chunk in chunks:
                 f.write(chunk)
 
         log.info(f"  ✓ Scaricato: {destinazione.name} ({destinazione.stat().st_size // 1024} KB)")
         return True
 
     except Exception as e:
-        log.error(f"  ✗ Errore download PDF ({url}): {e}")
+        log.error(f"  ✗ Errore download ({url}): {e}")
         return False
 
 
@@ -750,8 +775,13 @@ def genera_riassunto(atto: dict) -> str:
     oggetto = atto.get("oggetto", "")
     testo   = atto.get("testo_combinato", "")
 
-    # Tronca il testo se troppo lungo (Llama 3.3 supporta ~32k token)
-    testo_troncato = testo[:40000] if len(testo) > 40000 else testo
+    # Groq free tier: limite 12.000 token/minuto per llama-3.3-70b-versatile.
+    # Il testo italiano è circa 3-4 caratteri per token.
+    # Tronchiamo a 20.000 caratteri (~5.500 token) per stare larghi col prompt.
+    TESTO_MAX_CHARS = 20_000
+    testo_troncato = testo[:TESTO_MAX_CHARS] if len(testo) > TESTO_MAX_CHARS else testo
+    if len(testo) > TESTO_MAX_CHARS:
+        log.info(f"  Testo troncato: {len(testo)} → {TESTO_MAX_CHARS} char per rispettare limite token")
 
     prompt = f"""Sei un assistente che aiuta i cittadini del Comune di Pieve Emanuele (MI) a capire gli atti amministrativi pubblici.
 
