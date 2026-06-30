@@ -429,9 +429,14 @@ def elabora_atto(atto: dict) -> dict:
         log.warning(f"  → Nessun allegato PDF trovato per {atto.get('numero','?')}")
 
     atto["allegati"] = []
+    atto["n_allegati_totali"] = len(link_pdf)
     testi_pdf = []
 
-    for i, url_pdf in enumerate(link_pdf[:MAX_ALLEGATI], start=1):
+    # Leggi solo il primo allegato (il documento principale dell'atto).
+    # Gli allegati successivi sono tipicamente elaborati tecnici (computi metrici,
+    # planimetrie, capitolati) che appesantiscono il testo senza utilità per il
+    # riassunto. Il numero totale è salvato in n_allegati_totali.
+    for i, url_pdf in enumerate(link_pdf[:1], start=1):
         nome_file = f"allegato_{i}.pdf"
         percorso  = cartella_atto / nome_file
 
@@ -448,6 +453,9 @@ def elabora_atto(atto: dict) -> dict:
             "percorso_locale": str(percorso),
             "caratteri": len(testo),
         })
+
+    if len(link_pdf) > 1:
+        log.info(f"  → Letto solo allegato principale ({len(link_pdf)} allegati totali disponibili)")
 
     # Se non ci sono PDF, estrai testo inline dall'HTML della pagina di dettaglio.
     # Il portlet JCityGov per alcuni atti (delibere, ordinanze) incorpora il testo
@@ -585,37 +593,61 @@ def _trova_link_pdf(soup: BeautifulSoup) -> list[str]:
     visti = set()
 
     # ── Pattern principale: Base64 in onclick (JCityGov Liferay) ────────────
-    # Raccoglie tutte le URL decodificate, poi deuplica tenendo solo
-    # downloadSigned=false quando disponibile per lo stesso ID allegato.
-    url_per_id: dict[str, str] = {}   # id_allegato → url preferita (unsigned)
+    # La allegati-table ha righe con colonne: Titolo | Descrizione | Scarica
+    # La colonna Descrizione contiene "Documento principale" per l'atto principale
+    # e altre etichette per gli allegati tecnici.
+    # Per ogni riga estraiamo: descrizione + URL (preferendo downloadSigned=false).
 
-    for tag in soup.find_all("a", onclick=True):
-        onclick = tag.get("onclick", "")
-        matches = re.findall(r"atob\('([A-Za-z0-9+/=]+)'\)", onclick)
-        for b64 in matches:
-            try:
-                url = base64.b64decode(b64).decode("utf-8")
-                if "downloadAllegato" not in url:
-                    continue
-                # Estrai l'ID allegato Liferay dal parametro _..._id=XXXXX
-                id_match = re.search(r"_jcitygovalbopubblicazioni[^=]*_id=(\d+)", url)
-                id_all = id_match.group(1) if id_match else url
-                if "downloadSigned=false" in url:
-                    # Versione non firmata: ha priorità
-                    url_per_id[id_all] = url
-                elif id_all not in url_per_id:
-                    # Versione firmata: solo se non abbiamo ancora quella non firmata
-                    url_per_id[id_all] = url
-            except Exception:
-                pass
+    def _url_da_riga(tr) -> str | None:
+        """Estrae l'URL di download (unsigned se disponibile) da una riga della tabella."""
+        url_unsigned = None
+        url_signed = None
+        for tag in tr.find_all("a", onclick=True):
+            onclick = tag.get("onclick", "")
+            for b64 in re.findall(r"atob\('([A-Za-z0-9+/=]+)'\)", onclick):
+                try:
+                    url = base64.b64decode(b64).decode("utf-8")
+                    if "downloadAllegato" not in url:
+                        continue
+                    if "downloadSigned=false" in url:
+                        url_unsigned = url
+                    elif "downloadSigned=true" in url:
+                        url_signed = url
+                except Exception:
+                    pass
+        return url_unsigned or url_signed
 
-    for url in url_per_id.values():
+    # Cerca la allegati-table e processa riga per riga
+    allegati_table = soup.find(class_="allegati-table") or soup.find("table")
+    url_principale = None
+    url_altri: list[str] = []
+
+    if allegati_table:
+        for tr in allegati_table.find_all("tr"):
+            celle = tr.find_all("td")
+            if len(celle) < 2:
+                continue
+            descrizione = celle[1].get_text(strip=True).lower() if len(celle) > 1 else ""
+            url = _url_da_riga(tr)
+            if not url:
+                continue
+            if "documento principale" in descrizione:
+                url_principale = url
+            else:
+                url_altri.append(url)
+
+    # Il documento principale va sempre per primo
+    if url_principale:
+        url_pdf.append(url_principale)
+        visti.add(url_principale)
+    for url in url_altri:
         if url not in visti:
             url_pdf.append(url)
             visti.add(url)
 
     if url_pdf:
-        log.info(f"  Trovati {len(url_pdf)} allegati via Base64 onclick")
+        log.info(f"  Trovati {len(url_pdf)} allegati via Base64 onclick"
+                 + (f" (documento principale identificato)" if url_principale else ""))
         return url_pdf
 
     # ── Fallback: href tradizionali (altri portali o strutture alternative) ──
@@ -769,11 +801,12 @@ def genera_riassunto(atto: dict) -> str:
         log.warning("GROQ_API_KEY non impostata, salto riassunto.")
         return ""
 
-    tipo    = atto.get("tipo", "Atto")
-    numero  = atto.get("numero", "?")
-    anno    = atto.get("anno", "?")
-    oggetto = atto.get("oggetto", "")
-    testo   = atto.get("testo_combinato", "")
+    tipo         = atto.get("tipo", "Atto")
+    numero       = atto.get("numero", "?")
+    anno         = atto.get("anno", "?")
+    oggetto      = atto.get("oggetto", "")
+    testo        = atto.get("testo_combinato", "")
+    n_allegati   = atto.get("n_allegati_totali", 0)
 
     # Groq free tier: limite 12.000 token/minuto per llama-3.3-70b-versatile.
     # Il testo italiano è circa 3-4 caratteri per token.
@@ -783,12 +816,19 @@ def genera_riassunto(atto: dict) -> str:
     if len(testo) > TESTO_MAX_CHARS:
         log.info(f"  Testo troncato: {len(testo)} → {TESTO_MAX_CHARS} char per rispettare limite token")
 
+    nota_allegati = (
+        f"\nNota: l'atto ha {n_allegati} allegati totali (computi metrici, planimetrie, ecc.). "
+        f"Hai letto solo il documento principale. Se rilevante, puoi segnalare ai cittadini "
+        f"che gli allegati tecnici sono consultabili sul sito del Comune."
+        if n_allegati > 1 else ""
+    )
+
     prompt = f"""Sei un assistente che aiuta i cittadini del Comune di Pieve Emanuele (MI) a capire gli atti amministrativi pubblici.
 
 Atto: {tipo} n. {numero}/{anno}
 Oggetto: {oggetto}
-
-Testo allegati:
+{nota_allegati}
+Testo del documento principale:
 {testo_troncato if testo_troncato else "(nessun allegato leggibile)"}
 
 Scrivi un riassunto in italiano semplice, comprensibile a tutti i cittadini, di massimo 200 parole.
@@ -797,7 +837,8 @@ REGOLE OBBLIGATORIE:
 1. Se nell'atto è presente un impegno di spesa o un importo in euro (€), DEVI citarlo esplicitamente nel riassunto con il valore esatto (es. "impegno di spesa di € 12.500,00").
 2. Se è presente un fornitore o beneficiario del pagamento, citalo.
 3. Spiega brevemente di cosa si tratta e perché il Comune ha preso questa decisione.
-4. Usa un tono neutro e informativo. Inizia direttamente con il riassunto, senza intestazioni o prefazioni."""
+4. Se ci sono allegati tecnici aggiuntivi, concludi con una riga tipo "Gli allegati tecnici sono consultabili sul sito del Comune." — solo se davvero rilevante per il tipo di atto.
+5. Usa un tono neutro e informativo. Inizia direttamente con il riassunto, senza intestazioni o prefazioni."""
 
     try:
         client = Groq(api_key=api_key)
