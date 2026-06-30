@@ -382,6 +382,22 @@ def aggiorna_standalone(atti: list[dict]) -> bool:
     nuovo_blocco = atti_to_js_block(atti)
     raw = raw[:match.start()] + nuovo_blocco + raw[match.end():]
 
+    # Sostituisce ATTI_COUNTS con i conteggi reali per data (campo dk)
+    # Necessario per evidenziare i giorni con atti nel calendario
+    counts: dict[str, int] = {}
+    for a in atti:
+        dk = (a.get("data_inizio") or "")[:10]
+        if dk:
+            counts[dk] = counts.get(dk, 0) + 1
+    counts_js = json.dumps(counts, ensure_ascii=False)
+    pattern_counts = re.compile(r"ATTI_COUNTS = \{[^}]*\}")
+    match_counts = pattern_counts.search(raw)
+    if match_counts:
+        raw = raw[:match_counts.start()] + f"ATTI_COUNTS = {counts_js}" + raw[match_counts.end():]
+        print(f"  ATTI_COUNTS aggiornato: {len(counts)} date con atti")
+    else:
+        print("  ATTENZIONE: ATTI_COUNTS non trovato nel template, calendario non aggiornato")
+
     # Riassembla il file
     new_content = content[:tag_content_start] + raw + content[tag_end:]
 
