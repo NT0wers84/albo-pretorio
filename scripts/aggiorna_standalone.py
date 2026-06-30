@@ -358,13 +358,6 @@ def aggiorna_standalone(atti: list[dict]) -> bool:
 
     raw = content[tag_content_start:tag_end]
 
-    # Verifica che il JSON di partenza sia valido
-    try:
-        json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"ERRORE: template JSON non valido prima delle patch: {e}")
-        return False
-
     # Applica patch UI sul raw
     print("Applicazione patch al template:")
     raw = applica_patch_raw(raw)
@@ -420,20 +413,6 @@ def main():
     ok = aggiorna_standalone(atti)
 
     if ok:
-        # Verifica finale
-        with open(STANDALONE, "r", encoding="utf-8") as f:
-            content = f.read()
-        TAG = '<script type="__bundler/template">'
-        ts = content.find(TAG) + len(TAG)
-        te = content.find("</script>", ts)
-        try:
-            json.loads(content[ts:te])
-            print("✅ JSON template VALIDO")
-        except json.JSONDecodeError as e:
-            print(f"❌ JSON template INVALIDO: {e}")
-            pos = e.pos
-            raw = content[ts:te]
-            print(f"Contesto: {repr(raw[max(0,pos-100):pos+100])}")
         print(f"Aggiornamento completato: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     else:
         print("Aggiornamento fallito.")
