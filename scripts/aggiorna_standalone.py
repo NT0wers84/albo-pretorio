@@ -382,7 +382,11 @@ def aggiorna_standalone(atti: list[dict]) -> bool:
         dk = (a.get("data_inizio") or "")[:10]
         if dk:
             counts[dk] = counts.get(dk, 0) + 1
-    counts_js = json.dumps(counts, ensure_ascii=False)
+    # Usa virgolette singole per le chiavi: il template è una stringa JSON,
+    # quindi le virgolette doppie romperebbero il parsing. Le singole sono
+    # valide in JS e sicure dentro una stringa JSON.
+    pairs = ", ".join(f"'{k}': {v}" for k, v in counts.items())
+    counts_js = "{ " + pairs + " }" if pairs else "{}"
     pattern_counts = re.compile(r"ATTI_COUNTS = \{[^}]*\}")
     match_counts = pattern_counts.search(raw)
     if match_counts:
