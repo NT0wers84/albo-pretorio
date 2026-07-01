@@ -383,15 +383,16 @@ def aggiorna_standalone(atti: list[dict]) -> bool:
         if dk:
             counts[dk] = counts.get(dk, 0) + 1
     # Usa virgolette singole per le chiavi: il template è una stringa JSON,
-    # quindi le virgolette doppie romperebbero il parsing. Le singole sono
+    # quindi le virgolette doppie romperebbero il JSON.parse(). Le singole sono
     # valide in JS e sicure dentro una stringa JSON.
+    # Usa re.sub per sostituire TUTTE le occorrenze (il bundle ne ha più d'una).
     pairs = ", ".join(f"'{k}': {v}" for k, v in counts.items())
     counts_js = "{ " + pairs + " }" if pairs else "{}"
     pattern_counts = re.compile(r"ATTI_COUNTS = \{[^}]*\}")
-    match_counts = pattern_counts.search(raw)
-    if match_counts:
-        raw = raw[:match_counts.start()] + f"ATTI_COUNTS = {counts_js}" + raw[match_counts.end():]
-        print(f"  ATTI_COUNTS aggiornato: {len(counts)} date con atti")
+    n_sostituzioni = len(pattern_counts.findall(raw))
+    if n_sostituzioni:
+        raw = pattern_counts.sub(f"ATTI_COUNTS = {counts_js}", raw)
+        print(f"  ATTI_COUNTS aggiornato: {len(counts)} date con atti ({n_sostituzioni} occorrenze)")
     else:
         print("  ATTENZIONE: ATTI_COUNTS non trovato nel template, calendario non aggiornato")
 
