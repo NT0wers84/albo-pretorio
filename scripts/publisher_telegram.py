@@ -133,6 +133,19 @@ def main():
         log.info("Nessun atto nuovo da pubblicare su Telegram.")
         return
 
+    # Ordina per numero progressivo ascendente: l'atto con numero più alto
+    # arriva come ultimo messaggio in Telegram (= più in alto nel canale).
+    def _sort_key(a: dict) -> int:
+        raw = a.get("numero_raw", "") or ""
+        # Formato atteso: "2026/1319" → prende la parte numerica dopo "/"
+        parte = raw.split("/")[-1]
+        try:
+            return int(parte)
+        except ValueError:
+            return 0
+
+    atti = sorted(atti, key=_sort_key)
+
     oggi = date.today().strftime("%d/%m/%Y")
     log.info(f"Pubblico {len(atti)} atti su Telegram ({channel})")
 

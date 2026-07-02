@@ -197,6 +197,12 @@ PATCH3_NEW = (
 # Alias per compatibilità
 PATCH3_OLD = PATCH3_OLD_A
 
+# PATCH 5 — calendario: inizializza calYear/calMonth dal mese corrente
+# Senza questa patch il componente parte sempre sul mese hardcoded al momento
+# della build (es. giugno) invece del mese attuale.
+PATCH5_OLD = "calYear: 2026,\\n    calMonth: 5,"
+PATCH5_NEW = "calYear: new Date().getFullYear(),\\n    calMonth: new Date().getMonth(),"
+
 
 def applica_patch_raw(raw: str) -> str:
     """Applica le patch direttamente sul raw del file (idempotente)."""
@@ -263,6 +269,15 @@ def applica_patch_raw(raw: str) -> str:
             print("  ⚠ Patch 4: </head> non trovato nel template")
     else:
         print("  · Patch 4 già presente")
+
+    # PATCH 5 — calendario: calYear/calMonth dinamici (new Date())
+    if "calYear: new Date()" in raw:
+        print("  · Patch 5 già presente (calendario dinamico)")
+    elif PATCH5_OLD in raw:
+        raw = raw.replace(PATCH5_OLD, PATCH5_NEW)
+        print("  ✓ Patch 5 (calendario dinamico) applicata")
+    else:
+        print("  ⚠ Patch 5: target calYear/calMonth non trovato")
 
     return raw
 
