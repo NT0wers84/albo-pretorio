@@ -203,6 +203,37 @@ PATCH3_OLD = PATCH3_OLD_A
 PATCH5_OLD = "calYear: 2026,\\n    calMonth: 5,"
 PATCH5_NEW = "calYear: new Date().getFullYear(),\\n    calMonth: new Date().getMonth(),"
 
+# Pattern per i contatori numerici nell'header
+_STAT_NUM_PREFIX = 'font-size:34px;font-weight:400;color:#fff;line-height:1;margin-bottom:7px;letter-spacing:-.02em\\">'
+_STAT_NUM_SUFFIX = '<\\u002Fdiv>\\n      <div style=\\"font-size:10px;color:rgba(255,255,255,.9);text-transform:uppercase;letter-spacing:.09em;font-weight:600\\">'
+
+
+def aggiorna_contatori(raw: str, atti: list) -> str:
+    """Inietta i contatori header (archivio / questo mese / oggi) nel raw."""
+    from datetime import date as _date
+    oggi = _date.today().isoformat()
+    mese = oggi[:7]
+
+    totale      = len(atti)
+    questo_mese = sum(1 for a in atti if (a.get("data_inizio") or "")[:7] == mese)
+    pubblicati  = sum(1 for a in atti if (a.get("data_inizio") or "")[:10] == oggi)
+
+    def sostituisci(testo: str, label: str, valore: int) -> str:
+        pattern = re.compile(
+            r'(' + re.escape(_STAT_NUM_PREFIX) + r')\d+(' + re.escape(_STAT_NUM_SUFFIX) + re.escape(label) + r')'
+        )
+        nuovo, n = pattern.subn(rf'\g<1>{valore}\g<2>', testo)
+        if n:
+            print(f"  ✓ Contatore '{label}' → {valore}")
+        else:
+            print(f"  ⚠ Contatore '{label}': pattern non trovato")
+        return nuovo
+
+    raw = sostituisci(raw, "atti in archivio", totale)
+    raw = sostituisci(raw, "questo mese",      questo_mese)
+    raw = sostituisci(raw, "pubblicati oggi",  pubblicati)
+    return raw
+
 
 def applica_patch_raw(raw: str) -> str:
     """Applica le patch direttamente sul raw del file (idempotente)."""
@@ -410,6 +441,10 @@ def aggiorna_standalone(atti: list[dict]) -> bool:
         print(f"  ATTI_COUNTS aggiornato: {len(counts)} date con atti ({n_sostituzioni} occorrenze)")
     else:
         print("  ATTENZIONE: ATTI_COUNTS non trovato nel template, calendario non aggiornato")
+
+    # Aggiorna i contatori header (archivio / questo mese / oggi)
+    print("Aggiornamento contatori header:")
+    raw = aggiorna_contatori(raw, atti)
 
     # Riassembla il file
     new_content = content[:tag_content_start] + raw + content[tag_end:]
