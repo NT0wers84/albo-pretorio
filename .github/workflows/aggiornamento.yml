@@ -4,9 +4,10 @@ on:
   # Avvio manuale dalla tab "Actions" di GitHub
   workflow_dispatch:
 
-  # Automatico ogni giorno alle 08:00 ora italiana (06:00 UTC)
+  # Automatico ogni giorno alle 15:00 UTC (= ~17:00 ora italiana, tenendo conto
+  # del ritardo di ~2h tipico di GitHub Actions sui runner condivisi)
   schedule:
-    - cron: '0 10 * * *'
+    - cron: '0 15 * * *'
 
 permissions:
   contents: write
