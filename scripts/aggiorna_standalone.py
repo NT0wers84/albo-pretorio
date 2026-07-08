@@ -203,6 +203,45 @@ PATCH3_OLD = PATCH3_OLD_A
 PATCH5_OLD = "calYear: 2026,\\n    calMonth: 5,"
 PATCH5_NEW = "calYear: new Date().getFullYear(),\\n    calMonth: new Date().getMonth(),"
 
+# PATCH 6 — vista default: mostra solo ultimi 2 giorni; ricerca su tutti gli atti
+PATCH6_OLD = (
+    "const filteredCards = q === '' ? byType : byType.filter(a =>\\n"
+    "      a.oggetto.toLowerCase().includes(q) || a.riassunto.toLowerCase().includes(q)\\n"
+    "    );"
+)
+PATCH6_NEW = (
+    "const cutoffDk = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();\\n"
+    "    const filteredCards = q !== '' "
+    "? byType.filter(a => a.oggetto.toLowerCase().includes(q) || a.riassunto.toLowerCase().includes(q)) "
+    ": byType.filter(a => !!(a.dk) && a.dk >= cutoffDk);"
+)
+PATCH6_LABEL_OLD = "Ultimi 7 giorni"
+PATCH6_LABEL_NEW = "Ultimi 2 giorni"
+
+# PATCH 7 e 8 — RSS: autodiscovery nel <head> e link visibile nel footer
+_BS = chr(0x5c)
+_HEAD_CLOSE = f"<{_BS}u002Fhead>"
+_RSS_LINK = (
+    f'<link rel={_BS}"alternate{_BS}" '
+    f'type={_BS}"application/rss+xml{_BS}" '
+    f'title={_BS}"Albo Pretorio — Pieve Emanuele{_BS}" '
+    f'href={_BS}"https://nt0wers84.github.io/albo-pretorio/feed.xml{_BS}">'
+)
+PATCH7_OLD = _HEAD_CLOSE
+PATCH7_NEW = _RSS_LINK + _HEAD_CLOSE
+
+PATCH8_OLD = (
+    f'GitHub<{_BS}u002Fa>'
+    f'{_BS}n<{_BS}u002Ffooter>'
+)
+PATCH8_NEW = (
+    f'GitHub<{_BS}u002Fa>'
+    f' · <a href={_BS}"https://nt0wers84.github.io/albo-pretorio/feed.xml{_BS}"'
+    f' target={_BS}"_blank{_BS}" rel={_BS}"noopener{_BS}"'
+    f' style={_BS}"color:#B0AEA8;text-decoration:none{_BS}">Feed RSS<{_BS}u002Fa>'
+    f'{_BS}n<{_BS}u002Ffooter>'
+)
+
 # Pattern per i contatori numerici nell'header
 _STAT_NUM_PREFIX = 'font-size:34px;font-weight:400;color:#fff;line-height:1;margin-bottom:7px;letter-spacing:-.02em\\">'
 _STAT_NUM_SUFFIX = '<\\u002Fdiv>\\n      <div style=\\"font-size:10px;color:rgba(255,255,255,.9);text-transform:uppercase;letter-spacing:.09em;font-weight:600\\">'
@@ -309,6 +348,34 @@ def applica_patch_raw(raw: str) -> str:
         print("  ✓ Patch 5 (calendario dinamico) applicata")
     else:
         print("  ⚠ Patch 5: target calYear/calMonth non trovato")
+
+    # PATCH 6 — vista default: ultimi 2 giorni; ricerca su tutti gli atti
+    if "cutoffDk" in raw:
+        print("  · Patch 6 già presente (filtro 2 giorni)")
+    elif PATCH6_OLD in raw:
+        raw = raw.replace(PATCH6_OLD, PATCH6_NEW)
+        raw = raw.replace(PATCH6_LABEL_OLD, PATCH6_LABEL_NEW)
+        print("  ✓ Patch 6 (filtro 2 giorni + label) applicata")
+    else:
+        print("  ⚠ Patch 6: target filteredCards non trovato")
+
+    # PATCH 7 — link RSS autodiscovery nel <head>
+    if "application/rss+xml" in raw:
+        print("  · Patch 7 già presente (RSS autodiscovery)")
+    elif PATCH7_OLD in raw:
+        raw = raw.replace(PATCH7_OLD, PATCH7_NEW, 1)
+        print("  ✓ Patch 7 (RSS autodiscovery) applicata")
+    else:
+        print("  ⚠ Patch 7: </head> non trovato nel template")
+
+    # PATCH 8 — link RSS visibile nel footer
+    if "Feed RSS" in raw:
+        print("  · Patch 8 già presente (link RSS footer)")
+    elif PATCH8_OLD in raw:
+        raw = raw.replace(PATCH8_OLD, PATCH8_NEW, 1)
+        print("  ✓ Patch 8 (link RSS footer) applicata")
+    else:
+        print("  ⚠ Patch 8: footer GitHub non trovato")
 
     return raw
 
