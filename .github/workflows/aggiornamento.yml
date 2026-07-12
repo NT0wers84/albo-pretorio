@@ -65,7 +65,11 @@ jobs:
       - name: Aggiorna sito GitHub Pages
         run: python scripts/aggiorna_standalone.py
 
-      # 9. Salva tutto nel repository (dati + sito)
+      # 9. Genera il feed RSS (ultimi 30 giorni)
+      - name: Genera feed RSS
+        run: python scripts/genera_rss.py
+
+      # 10. Salva tutto nel repository (dati + sito)
       - name: Salva risultati nel repository
         run: |
           git config user.name "AlboPretorioBot"
