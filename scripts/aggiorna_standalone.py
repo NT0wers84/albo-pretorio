@@ -234,7 +234,7 @@ PATCH7_NEW = _RSS_LINK + _HEAD_CLOSE
 def _ft_link(url: str, testo: str) -> str:
     return (
         f'<a href={_Q}{url}{_Q} target={_Q}_blank{_Q} rel={_Q}noopener{_Q}'
-        f' style={_Q}color:#B0AEA8;text-decoration:none{_Q}>{testo}<\\/a>'
+        f' style={_Q}color:#555350;text-decoration:none{_Q}>{testo}<\\/a>'
     )
 
 
@@ -261,6 +261,18 @@ PATCH8_FOOTER_NEW = (
 
 PATCH9_OLD = "background-color:#447685"
 PATCH9_NEW = "background-color:#123785"
+
+# PATCH 10 — header: titolo, sottotitolo e descrizione
+_P10_DONE        = "Albo in chiaro"
+PATCH10_H1_OLD   = "\\n    Albo Pretorio\\n  "
+PATCH10_H1_NEW   = "\\n    Albo in chiaro\\n  "
+PATCH10_SUB_OLD  = "Gli atti del Comune spiegati in chiaro, per tutti"
+PATCH10_SUB_NEW  = "Pieve Emanuele"
+PATCH10_CAP_OLD  = "Aggiornato ogni giorno · progetto open source"
+PATCH10_CAP_NEW  = ("Ogni atto pubblicato sull’albo pretorio del Comune,"
+                    " letto automaticamente e spiegato in parole semplici."
+                    " Progetto civico indipendente,"
+                    " non affiliato al Comune di Pieve Emanuele.")
 
 # Pattern per i contatori numerici nell'header
 _STAT_NUM_PREFIX = 'font-size:34px;font-weight:400;color:#fff;line-height:1;margin-bottom:7px;letter-spacing:-.02em\\">'
@@ -409,6 +421,32 @@ def applica_patch_raw(raw: str) -> str:
         print("  ✓ Patch 9 (header color #123785) applicata")
     else:
         print("  ⚠ Patch 9: background-color header non trovato")
+
+    # PATCH 10 — header: titolo "Albo in chiaro", sottotitolo, descrizione
+    if _P10_DONE in raw:
+        print("  · Patch 10 già presente (header testi)")
+    else:
+        ok = True
+        if PATCH10_H1_OLD in raw:
+            raw = raw.replace(PATCH10_H1_OLD, PATCH10_H1_NEW, 1)
+            print("  ✓ Patch 10a (H1: Albo in chiaro) applicata")
+        else:
+            print("  ⚠ Patch 10a: testo H1 non trovato")
+            ok = False
+        if PATCH10_SUB_OLD in raw:
+            raw = raw.replace(PATCH10_SUB_OLD, PATCH10_SUB_NEW, 1)
+            print("  ✓ Patch 10b (sottotitolo: Pieve Emanuele) applicata")
+        else:
+            print("  ⚠ Patch 10b: sottotitolo non trovato")
+            ok = False
+        if PATCH10_CAP_OLD in raw:
+            raw = raw.replace(PATCH10_CAP_OLD, PATCH10_CAP_NEW, 1)
+            print("  ✓ Patch 10c (descrizione civica) applicata")
+        else:
+            print("  ⚠ Patch 10c: caption non trovato")
+            ok = False
+        if ok:
+            print("  ✓ Patch 10 (header testi) completata")
 
     return raw
 
