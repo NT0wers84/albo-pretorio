@@ -218,29 +218,54 @@ PATCH6_NEW = (
 PATCH6_LABEL_OLD = "Ultimi 7 giorni"
 PATCH6_LABEL_NEW = "Ultimi 2 giorni"
 
-# PATCH 7 e 8 — RSS: autodiscovery nel <head> e link visibile nel footer
+# PATCH 7 — RSS autodiscovery nel <head>
 _BS = chr(0x5c)
 _HEAD_CLOSE = f"<{_BS}u002Fhead>"
 _RSS_LINK = (
-    f'<link rel={_BS}"alternate{_BS}" '
-    f'type={_BS}"application/rss+xml{_BS}" '
-    f'title={_BS}"Albo Pretorio — Pieve Emanuele{_BS}" '
-    f'href={_BS}"https://nt0wers84.github.io/albo-pretorio/feed.xml{_BS}">'
+    f'<link rel={_Q}alternate{_Q} '
+    f'type={_Q}application/rss+xml{_Q} '
+    f'title={_Q}Albo Pretorio — Pieve Emanuele{_Q} '
+    f'href={_Q}https://nt0wers84.github.io/albo-pretorio/feed.xml{_Q}>'
 )
 PATCH7_OLD = _HEAD_CLOSE
 PATCH7_NEW = _RSS_LINK + _HEAD_CLOSE
 
-PATCH8_OLD = (
-    f'GitHub<{_BS}u002Fa>'
-    f'{_BS}n<{_BS}u002Ffooter>'
+
+def _ft_link(url: str, testo: str) -> str:
+    """Link per il footer del sito (raw-encoded per il bundle JSON)."""
+    return (
+        f'<a href={_Q}{url}{_Q} target={_Q}_blank{_Q} rel={_Q}noopener{_Q}'
+        f' style={_Q}color:#B0AEA8;text-decoration:none{_Q}>{testo}<\\/a>'
+    )
+
+
+# PATCH 8 — Footer completo: "Come funziona" + gemello + Feed RSS
+# Idempotency: se "Come funziona" è già nel raw, saltiamo.
+# Âncora di ricerca: il commento HTML <!-- FOOTER --> sempre presente nel bundle.
+_PATCH8_DONE   = "Come funziona"
+_PATCH8_ANCHOR = "<!-- FOOTER -->"
+_PATCH8_FT_END = f"<{_BS}u002Ffooter>"
+PATCH8_FOOTER_NEW = (
+    f'{_PATCH8_ANCHOR}\\n'
+    f'<footer style={_Q}text-align:center;padding:32px 20px 24px;'
+    f'font-size:12.5px;color:#C0BEB8;border-top:0.5px solid rgba(0,0,0,.07){_Q}>\\n'
+    f'  <div style={_Q}margin:0 auto 14px;max-width:660px;line-height:1.75{_Q}>'
+    f'<strong>Come funziona.<\\/strong>'
+    f" Un automatismo legge ogni giorno l'Albo Pretorio del Comune di"
+    f" Pieve Emanuele, scarica gli atti e li riassume con l'intelligenza"
+    f" artificiale. L'estrazione automatica può contenere errori:"
+    f" fa fede sempre l'atto originale, linkato in ogni scheda."
+    f'<\\/div>\\n'
+    f'  Dati: {_ft_link("https://pieveemanuele.trasparenza-valutazione-merito.it/web/trasparenza", "Amministrazione Trasparente — Comune di Pieve Emanuele")}\\n'
+    f'  · Codice: {_ft_link("https://github.com/NT0wers84/albo-pretorio", "GitHub")}\\n'
+    f'  · {_ft_link("https://nt0wers84.github.io/albo-pretorio/feed.xml", "Feed RSS")}\\n'
+    f'  · Progetto gemello: {_ft_link("https://nt0wers84.github.io/bilanciopertutti/", "OpenSpese Pieve Emanuele")}\\n'
+    f'{_PATCH8_FT_END}'
 )
-PATCH8_NEW = (
-    f'GitHub<{_BS}u002Fa>'
-    f' · <a href={_BS}"https://nt0wers84.github.io/albo-pretorio/feed.xml{_BS}"'
-    f' target={_BS}"_blank{_BS}" rel={_BS}"noopener{_BS}"'
-    f' style={_BS}"color:#B0AEA8;text-decoration:none{_BS}">Feed RSS<{_BS}u002Fa>'
-    f'{_BS}n<{_BS}u002Ffooter>'
-)
+
+# PATCH 9 — Header: allinea il colore sfondo a bilanciopertutti (#123785)
+PATCH9_OLD = "background-color:#447685"
+PATCH9_NEW = "background-color:#123785"
 
 # Pattern per i contatori numerici nell'header
 _STAT_NUM_PREFIX = 'font-size:34px;font-weight:400;color:#fff;line-height:1;margin-bottom:7px;letter-spacing:-.02em\\">'
@@ -286,24 +311,24 @@ def applica_patch_raw(raw: str) -> str:
         print("  ✓ Patch 1 (modale data-*) applicata")
     elif "rias-short" in raw and "rias-toggle" in raw:
         # Variante con onclick inline o struttura diversa — usa regex
-        import re as _re
-        m_p1 = _re.search(
+        m_p1 = re.search(
             r'<p style=\\"font-size:12px[^>]+>.*?<\\u002Fbutton>',
             raw, _re.DOTALL
         )
         if m_p1:
-            raw = raw[:m_p1.start()] + PATCH1_NEW + raw[m_p1.end():]
+            raw = raw[:m_p1.start()] + PATCH1_NEW + raw[m_p1.end():]  # noqa: E501
             print("  ✓ Patch 1 aggiornata (regex→modale data-*)")
         else:
             print("  ⚠ Patch 1: regex non trova il blocco")
     else:
         print("  ⚠ Patch 1: target non trovato")
 
-    if PATCH2_OLD in raw:
+    # "sc-if" compare solo in PATCH2_NEW, non in PATCH2_OLD
+    if "sc-if" in raw:
+        print("  · Patch 2 già presente")
+    elif PATCH2_OLD in raw:
         raw = raw.replace(PATCH2_OLD, PATCH2_NEW)
         print("  ✓ Patch 2 (link archivio) applicata")
-    elif "hasArchivio" in raw:
-        print("  · Patch 2 già presente")
     else:
         print("  ⚠ Patch 2: target non trovato")
 
@@ -324,14 +349,13 @@ def applica_patch_raw(raw: str) -> str:
     if 'id=rias-ov' not in raw and 'id=\\"rias-ov\\"' not in raw:
         if PATCH4_MARKER in raw:
             # Rimuovi eventuale vecchio script (varianti precedenti)
-            import re as _re
-            raw = _re.sub(r'<script>function riasToggle[^<]*<\\/script>', '', raw)
+            raw = re.sub(r'<script>function riasToggle[^<]*<\\/script>', '', raw)
             # Rimuovi vecchio modale rias-overlay se presente
-            raw = _re.sub(
+            raw = re.sub(
                 r'<style>#rias-overlay\{.*?<\\/script>',
                 '',
                 raw,
-                flags=_re.DOTALL
+                flags=re.DOTALL
             )
             raw = raw.replace(PATCH4_MARKER, PATCH4_NEW, 1)
             print("  ✓ Patch 4 (modale overlay) iniettata nel <head>")
@@ -368,14 +392,25 @@ def applica_patch_raw(raw: str) -> str:
     else:
         print("  ⚠ Patch 7: </head> non trovato nel template")
 
-    # PATCH 8 — link RSS visibile nel footer
-    if "Feed RSS" in raw:
-        print("  · Patch 8 già presente (link RSS footer)")
-    elif PATCH8_OLD in raw:
-        raw = raw.replace(PATCH8_OLD, PATCH8_NEW, 1)
-        print("  ✓ Patch 8 (link RSS footer) applicata")
+    # PATCH 8 — Footer completo: "Come funziona" + gemello + Feed RSS
+    if _PATCH8_DONE in raw:
+        print("  · Patch 8 già presente (footer completo)")
+    elif _PATCH8_ANCHOR in raw:
+        fi_start = raw.find(_PATCH8_ANCHOR)
+        fi_end   = raw.find(_PATCH8_FT_END, fi_start) + len(_PATCH8_FT_END)
+        raw = raw[:fi_start] + PATCH8_FOOTER_NEW + raw[fi_end:]
+        print("  ✓ Patch 8 (footer completo con gemello) applicata")
     else:
-        print("  ⚠ Patch 8: footer GitHub non trovato")
+        print("  ⚠ Patch 8: marker <!-- FOOTER --> non trovato nel template")
+
+    # PATCH 9 — Header: sfondo #123785 (allineato a bilanciopertutti)
+    if PATCH9_NEW in raw:
+        print("  · Patch 9 già presente (header color)")
+    elif PATCH9_OLD in raw:
+        raw = raw.replace(PATCH9_OLD, PATCH9_NEW)
+        print("  ✓ Patch 9 (header color #123785) applicata")
+    else:
+        print("  ⚠ Patch 9: background-color header non trovato")
 
     return raw
 
