@@ -1,7 +1,7 @@
 """
 scraper.py — Albo Pretorio Comune di Pieve Emanuele
 Piattaforma: JCityGov di Maggioli (Liferay)
-Eseguito da GitHub Actions ogni giorno alle 15:00 UTC (cron 0 15 * * *)
+Eseguito da GitHub Actions ogni giorno alle 08:00 (cron 0 6 * * *)
 """
 
 import os
