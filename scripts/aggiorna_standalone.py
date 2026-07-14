@@ -244,7 +244,7 @@ _PATCH8_FT_END = f"<{_BS}u002Ffooter>"
 PATCH8_FOOTER_NEW = (
     f'{_PATCH8_ANCHOR}\\n'
     f'<footer style={_Q}text-align:center;padding:32px 20px 24px;'
-    f'font-size:12.5px;color:#C0BEB8;border-top:0.5px solid rgba(0,0,0,.07){_Q}>\\n'
+    f'font-size:12.5px;color:#636158;border-top:1px solid rgba(0,0,0,.10){_Q}>\\n'
     f'  <div style={_Q}margin:0 auto 14px;max-width:660px;line-height:1.75{_Q}>'
     "<strong>Come funziona.<\\/strong>"
     " Un automatismo legge ogni giorno l'Albo Pretorio del Comune di"
@@ -261,6 +261,13 @@ PATCH8_FOOTER_NEW = (
 
 PATCH9_OLD = "background-color:#447685"
 PATCH9_NEW = "background-color:#123785"
+
+# PATCH 11 — footer: corregge colori chiari (#C0BEB8 / #B0AEA8) → leggibili
+_P11_DONE        = "color:#636158;border-top:1px solid rgba(0,0,0,.10)"
+PATCH11_FT_OLD   = "color:#C0BEB8;border-top:0.5px solid rgba(0,0,0,.07)"
+PATCH11_FT_NEW   = "color:#636158;border-top:1px solid rgba(0,0,0,.10)"
+PATCH11_LNK_OLD  = "color:#B0AEA8;text-decoration:none"
+PATCH11_LNK_NEW  = "color:#555350;text-decoration:none"
 
 # PATCH 10 — header: titolo, sottotitolo e descrizione
 _P10_DONE        = "Albo in chiaro"
@@ -421,6 +428,16 @@ def applica_patch_raw(raw: str) -> str:
         print("  ✓ Patch 9 (header color #123785) applicata")
     else:
         print("  ⚠ Patch 9: background-color header non trovato")
+
+    # PATCH 11 — footer: colori leggibili
+    if _P11_DONE in raw:
+        print("  · Patch 11 già presente (footer colori)")
+    elif PATCH11_FT_OLD in raw:
+        raw = raw.replace(PATCH11_FT_OLD, PATCH11_FT_NEW)
+        raw = raw.replace(PATCH11_LNK_OLD, PATCH11_LNK_NEW)
+        print("  ✓ Patch 11 (footer colori leggibili) applicata")
+    else:
+        print("  ⚠ Patch 11: stile footer non trovato")
 
     # PATCH 10 — header: titolo "Albo in chiaro", sottotitolo, descrizione
     if _P10_DONE in raw:
