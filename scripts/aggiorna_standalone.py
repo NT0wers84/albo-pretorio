@@ -281,6 +281,33 @@ PATCH10_CAP_NEW  = ("Ogni atto pubblicato sull’albo pretorio del Comune,"
                     " Progetto civico indipendente,"
                     " non affiliato al Comune di Pieve Emanuele.")
 
+# PATCH 12 — responsive CSS per mobile (iniettato nel <head>)
+_P12_DONE  = "@media (max-width:640px)"
+_MOBILE_CSS = (
+    "<style>"
+    "@media (max-width:640px){"
+    # Header: riduci padding e H1
+    "header{padding:36px 16px 32px!important}"
+    "header h1{font-size:32px!important;margin-bottom:10px!important}"
+    # Stat boxes: scorrevoli orizzontalmente su schermi stretti
+    "header div[style*='inline-flex']{display:flex!important;overflow-x:auto!important;"
+    "border-radius:12px!important;-webkit-overflow-scrolling:touch}"
+    "header div[style*='inline-flex']>div{padding:14px 20px!important;min-width:72px}"
+    # Numeri stat: riduci font size (override inline, senza rompere aggiorna_contatori)
+    "header div[style*='font-size:34px']{font-size:26px!important}"
+    # Main: meno padding laterale e verticale
+    "main{padding:24px 14px 60px!important}"
+    # Filter chips: meno margine inferiore
+    "main div[style*='flex-wrap:wrap']{margin-bottom:20px!important}"
+    # Modale: padding ridotto, più spazio lettura
+    "#rias-box{padding:20px 16px 16px!important;border-radius:12px!important}"
+    "#rias-ogg{font-size:14px!important}"
+    "#rias-txt{font-size:13px!important}"
+    "}"
+    "<\\/style>"
+)
+PATCH12_NEW = _MOBILE_CSS + _HEAD_CLOSE
+
 # Pattern per i contatori numerici nell'header
 _STAT_NUM_PREFIX = 'font-size:34px;font-weight:400;color:#fff;line-height:1;margin-bottom:7px;letter-spacing:-.02em\\">'
 _STAT_NUM_SUFFIX = '<\\u002Fdiv>\\n      <div style=\\"font-size:10px;color:rgba(255,255,255,.9);text-transform:uppercase;letter-spacing:.09em;font-weight:600\\">'
@@ -438,6 +465,15 @@ def applica_patch_raw(raw: str) -> str:
         print("  ✓ Patch 11 (footer colori leggibili) applicata")
     else:
         print("  ⚠ Patch 11: stile footer non trovato")
+
+    # PATCH 12 — responsive CSS mobile (iniettato nel <head>)
+    if _P12_DONE in raw:
+        print("  · Patch 12 già presente (responsive CSS)")
+    elif _HEAD_CLOSE in raw:
+        raw = raw.replace(_HEAD_CLOSE, PATCH12_NEW, 1)
+        print("  ✓ Patch 12 (responsive CSS mobile) applicata")
+    else:
+        print("  ⚠ Patch 12: </head> non trovato nel template")
 
     # PATCH 10 — header: titolo "Albo in chiaro", sottotitolo, descrizione
     if _P10_DONE in raw:
