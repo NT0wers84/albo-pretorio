@@ -82,6 +82,7 @@ jobs:
           git config user.email "bot@albo-pretorio.local"
           git add data/ docs/
           git diff --staged --quiet || git commit -m "Aggiornamento albo: $(date '+%Y-%m-%d')"
+          git pull --rebase origin main
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
