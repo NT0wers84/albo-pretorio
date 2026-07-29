@@ -15,6 +15,8 @@ Progetto gemello: https://nt0wers84.github.io/bilanciopertutti/
   download PDF, OCR con Tesseract, riassunto AI via Groq
 - `scripts/publisher_telegram.py` — pubblica i nuovi atti sul canale Telegram,
   ordinati per numero progressivo crescente
+- `scripts/publisher_email.py` — invia la digest HTML dei nuovi atti via Buttondown
+  (newsletter gratuita, attivata solo se `BUTTONDOWN_API_KEY` è impostata)
 - `scripts/aggiorna_standalone.py` — inietta i dati aggiornati nel bundle HTML del sito
   (patch idempotenti sul template JSON)
 - `scripts/genera_rss.py` — genera `docs/feed.xml` con gli ultimi 30 giorni di atti
@@ -27,6 +29,7 @@ Progetto gemello: https://nt0wers84.github.io/bilanciopertutti/
 1. **Secrets** (Settings → Secrets and variables → Actions):
    - `GROQ_API_KEY` — da https://console.groq.com (piano gratuito disponibile)
    - `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHANNEL_ID` — opzionali
+   - `BUTTONDOWN_API_KEY` — da https://buttondown.com/settings (opzionale, per newsletter email)
 2. **GitHub Pages**: Settings → Pages → Source: branch `main`, cartella `/docs`
 
 Il workflow parte automaticamente ogni giorno alle 15:00 UTC (~17:00 ora italiana,

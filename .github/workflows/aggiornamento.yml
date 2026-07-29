@@ -61,15 +61,21 @@ jobs:
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: python scripts/publisher_telegram.py
 
-      # 8. Aggiorna il sito standalone con i dati freschi
+      # 8. Pubblica newsletter email via Buttondown (solo se ci sono atti nuovi)
+      - name: Pubblica newsletter email
+        env:
+          BUTTONDOWN_API_KEY: ${{ secrets.BUTTONDOWN_API_KEY }}
+        run: python scripts/publisher_email.py
+
+      # 9. Aggiorna il sito standalone con i dati freschi
       - name: Aggiorna sito GitHub Pages
         run: python scripts/aggiorna_standalone.py
 
-      # 9. Genera il feed RSS (ultimi 30 giorni)
+      # 10. Genera il feed RSS (ultimi 30 giorni)
       - name: Genera feed RSS
         run: python scripts/genera_rss.py
 
-      # 10. Salva tutto nel repository (dati + sito)
+      # 11. Salva tutto nel repository (dati + sito)
       - name: Salva risultati nel repository
         run: |
           git config user.name "AlboPretorioBot"
