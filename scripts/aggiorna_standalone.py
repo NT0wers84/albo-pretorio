@@ -241,6 +241,28 @@ def _ft_link(url: str, testo: str) -> str:
 _PATCH8_DONE   = "Come funziona"
 _PATCH8_ANCHOR = "<!-- FOOTER -->"
 _PATCH8_FT_END = f"<{_BS}u002Ffooter>"
+_NEWSLETTER_EMBED = "https://buttondown.com/api/emails/embed-subscribe/albo-pretorio-pe"
+
+# Form embed Buttondown (json-safe: virgolette → _Q, tag chiusi → <\\/tag>)
+_NEWSLETTER_FORM = (
+    f'<div style={_Q}margin:24px auto 20px;max-width:440px;text-align:center{_Q}>'
+    f'<p style={_Q}font-size:12px;font-weight:600;color:#555;margin:0 0 10px;'
+    f'text-transform:uppercase;letter-spacing:.07em{_Q}>'
+    'Ricevi gli atti nella tua email'
+    '<\\/p>'
+    f'<form action={_Q}{_NEWSLETTER_EMBED}{_Q} method={_Q}post{_Q}'
+    f' style={_Q}display:flex;gap:8px;justify-content:center;flex-wrap:wrap{_Q}>'
+    f'<input type={_Q}email{_Q} name={_Q}email{_Q} placeholder={_Q}la tua email{_Q}'
+    f' style={_Q}font-size:13px;padding:8px 12px;border:1px solid rgba(0,0,0,.15);'
+    f'border-radius:8px;outline:none;font-family:inherit;color:#141412;'
+    f'background:#fff;flex:1;min-width:160px;max-width:220px{_Q}>'
+    f'<input type={_Q}submit{_Q} value={_Q}Iscriviti{_Q}'
+    f' style={_Q}font-size:13px;font-weight:600;padding:8px 16px;'
+    f'background:#123785;color:#fff;border:none;border-radius:8px;'
+    f'cursor:pointer;font-family:inherit{_Q}>'
+    f'<\\/form><\\/div>\\n'
+)
+
 PATCH8_FOOTER_NEW = (
     f'{_PATCH8_ANCHOR}\\n'
     f'<footer style={_Q}text-align:center;padding:32px 20px 24px;'
@@ -252,10 +274,23 @@ PATCH8_FOOTER_NEW = (
     " artificiale. L'estrazione automatica può contenere errori:"
     " fa fede sempre l'atto originale, linkato in ogni scheda."
     "<\\/div>\\n"
+    f'{_NEWSLETTER_FORM}'
     f'  Dati: {_ft_link("https://pieveemanuele.trasparenza-valutazione-merito.it/web/trasparenza", "Amministrazione Trasparente — Comune di Pieve Emanuele")}\\n'
     f'  · Codice: {_ft_link("https://github.com/NT0wers84/albo-pretorio", "GitHub")}\\n'
     f'  · {_ft_link("https://nt0wers84.github.io/albo-pretorio/feed.xml", "Feed RSS")}\\n'
     f'  · Progetto gemello: {_ft_link("https://nt0wers84.github.io/bilanciopertutti/", "OpenSpese Pieve Emanuele")}\\n'
+    f'{_PATCH8_FT_END}'
+)
+
+# PATCH 13 — aggiunge form newsletter nel footer (per siti con PATCH8 già applicata)
+_P13_DONE = "embed-subscribe/albo-pretorio-pe"
+_P13_OLD = (
+    f'  · Progetto gemello: {_ft_link("https://nt0wers84.github.io/bilanciopertutti/", "OpenSpese Pieve Emanuele")}\\n'
+    f'{_PATCH8_FT_END}'
+)
+_P13_NEW = (
+    f'  · Progetto gemello: {_ft_link("https://nt0wers84.github.io/bilanciopertutti/", "OpenSpese Pieve Emanuele")}\\n'
+    f'{_NEWSLETTER_FORM}'
     f'{_PATCH8_FT_END}'
 )
 
@@ -446,6 +481,15 @@ def applica_patch_raw(raw: str) -> str:
             print("  ✓ Patch 8 (footer completo con gemello) applicata")
     else:
         print("  ⚠ Patch 8: marker <!-- FOOTER --> non trovato nel template")
+
+    # PATCH 13 — form newsletter nel footer
+    if _P13_DONE in raw:
+        print("  · Patch 13 già presente (form newsletter footer)")
+    elif _P13_OLD in raw:
+        raw = raw.replace(_P13_OLD, _P13_NEW, 1)
+        print("  ✓ Patch 13 (form newsletter footer) applicata")
+    else:
+        print("  · Patch 13: footer aggiornato da PATCH8 (skip)")
 
     # PATCH 9 — header color #123785
     if PATCH9_NEW in raw:
