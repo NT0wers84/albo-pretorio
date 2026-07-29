@@ -131,6 +131,7 @@ def invia_email(api_key: str, subject: str, body: str) -> bool:
     headers = {
         "Authorization": f"Token {api_key}",
         "Content-Type": "application/json",
+        "X-Buttondown-Live-Dangerously": "yep",
     }
     payload = {
         "subject": subject,

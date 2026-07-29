@@ -483,13 +483,15 @@ def applica_patch_raw(raw: str) -> str:
         print("  ⚠ Patch 8: marker <!-- FOOTER --> non trovato nel template")
 
     # PATCH 13 — form newsletter nel footer
+    # Usa rfind su _PATCH8_FT_END per trovare l'ultimo </footer> (robusto a varianti del testo)
     if _P13_DONE in raw:
         print("  · Patch 13 già presente (form newsletter footer)")
-    elif _P13_OLD in raw:
-        raw = raw.replace(_P13_OLD, _P13_NEW, 1)
+    elif _PATCH8_DONE in raw and _PATCH8_FT_END in raw:
+        idx = raw.rfind(_PATCH8_FT_END)
+        raw = raw[:idx] + _NEWSLETTER_FORM + raw[idx:]
         print("  ✓ Patch 13 (form newsletter footer) applicata")
     else:
-        print("  · Patch 13: footer aggiornato da PATCH8 (skip)")
+        print("  ⚠ Patch 13: footer non trovato (PATCH8 non applicata?)")
 
     # PATCH 9 — header color #123785
     if PATCH9_NEW in raw:
