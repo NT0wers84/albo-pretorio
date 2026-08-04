@@ -128,24 +128,47 @@ def costruisci_email(atti: list[dict], oggi: str) -> tuple[str, str]:
 # ── Invio Buttondown ──────────────────────────────────────────────────────────
 
 def invia_email(api_key: str, subject: str, body: str) -> bool:
+    """
+    Invia via Buttondown in due step:
+    1. Crea come draft  → POST /v1/emails
+    2. Mette in coda   → PATCH /v1/emails/{id}  status: about_to_send
+    """
     headers = {
         "Authorization": f"Token {api_key}",
         "Content-Type": "application/json",
-        "X-Buttondown-Live-Dangerously": "yep",
     }
+
+    # Step 1 — crea draft
     payload = {
         "subject": subject,
         "body": body,
         "email_type": "public",
-        "status": "about_to_send",
+        "status": "draft",
     }
     try:
         resp = requests.post(BUTTONDOWN_API, headers=headers, json=payload, timeout=30)
-        if resp.status_code in (200, 201):
-            log.info(f"Email inviata con successo (status {resp.status_code})")
+        if resp.status_code not in (200, 201):
+            log.error(f"Buttondown crea draft error {resp.status_code}: {resp.text[:300]}")
+            return False
+        email_id = resp.json().get("id")
+        if not email_id:
+            log.error("Buttondown: ID email non trovato nella risposta")
+            return False
+        log.info(f"Draft creato: {email_id}")
+    except Exception as e:
+        log.error(f"Errore creazione draft: {e}")
+        return False
+
+    # Step 2 — metti in coda di invio
+    try:
+        patch_url = f"{BUTTONDOWN_API}/{email_id}"
+        resp2 = requests.patch(patch_url, headers=headers,
+                               json={"status": "about_to_send"}, timeout=30)
+        if resp2.status_code in (200, 201):
+            log.info(f"Email in coda di invio (status {resp2.status_code})")
             return True
         else:
-            log.error(f"Buttondown API error {resp.status_code}: {resp.text[:200]}")
+            log.error(f"Buttondown invio error {resp2.status_code}: {resp2.text[:300]}")
             return False
     except Exception as e:
         log.error(f"Errore invio email: {e}")
