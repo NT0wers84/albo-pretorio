@@ -49,21 +49,29 @@ def _card_atto(atto: dict) -> str:
     url       = atto.get("url_dettaglio", SITO_URL)
 
     riassunto_html = (
-        f'<p style="font-size:13px;color:#636158;line-height:1.75;margin:0 0 14px">'
+        f'<p style="font-size:13px;color:#555350;line-height:1.8;margin:0 0 16px">'
         f'{riassunto}</p>'
     ) if riassunto else ""
 
     return (
-        f'<div style="background:#fff;border:0.5px solid rgba(0,0,0,.08);'
-        f'border-radius:12px;padding:18px 20px;margin-bottom:16px">'
-        f'  <div style="font-size:11px;font-weight:600;color:#123785;'
-        f'text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">'
-        f'{tipo} · n.&nbsp;{numero}</div>'
-        f'  <h2 style="font-size:14px;font-weight:500;color:#141412;'
-        f'line-height:1.55;margin:0 0 10px">{oggetto}</h2>'
-        f'  {riassunto_html}'
-        f'  <a href="{url}" style="font-size:12px;color:#123785;'
-        f'text-decoration:none;font-weight:500">Leggi l\'atto completo →</a>'
+        # Card con bordo sinistro blu e sfondo bianco
+        f'<div style="background:#ffffff;border-radius:12px;margin-bottom:16px;'
+        f'border-left:3px solid #1B4FCA;padding:20px 22px;'
+        f'border-top:1px solid rgba(0,0,0,.07);border-right:1px solid rgba(0,0,0,.07);'
+        f'border-bottom:1px solid rgba(0,0,0,.07)">'
+        # Chip tipo
+        f'<div style="display:inline-block;background:#EEF2FF;color:#1B4FCA;'
+        f'font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;'
+        f'letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">'
+        f'{tipo}&nbsp;·&nbsp;n.&nbsp;{numero}</div>'
+        # Titolo
+        f'<p style="font-size:14px;font-weight:600;color:#141412;'
+        f'line-height:1.55;margin:0 0 12px">{oggetto}</p>'
+        # Riassunto
+        f'{riassunto_html}'
+        # Link
+        f'<a href="{url}" style="font-size:12px;color:#1B4FCA;font-weight:600;'
+        f'text-decoration:none">Leggi l\'atto completo&nbsp;→</a>'
         f'</div>'
     )
 
@@ -71,11 +79,11 @@ def _card_atto(atto: dict) -> str:
 def costruisci_email(atti: list[dict], oggi: str) -> tuple[str, str]:
     """Restituisce (subject, body_html)."""
     n = len(atti)
-    intro = (
-        f"Oggi {'è stato pubblicato' if n == 1 else 'sono stati pubblicati'} "
-        f"<strong>{n} {'atto' if n == 1 else 'atti'} nuovi</strong> "
-        f"sull'Albo Pretorio del Comune di Pieve Emanuele."
-    )
+    # Grammatica corretta: "1 atto nuovo" / "N atti nuovi"
+    if n == 1:
+        intro = "Oggi è stato pubblicato <strong>1 atto nuovo</strong> sull'Albo Pretorio del Comune di Pieve Emanuele."
+    else:
+        intro = f"Oggi sono stati pubblicati <strong>{n} atti nuovi</strong> sull'Albo Pretorio del Comune di Pieve Emanuele."
 
     cards = "\n".join(_card_atto(a) for a in atti)
 
@@ -85,21 +93,23 @@ def costruisci_email(atti: list[dict], oggi: str) -> tuple[str, str]:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
 </head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  color:#141412;background:#F2F1ED;margin:0;padding:0">
-  <div style="max-width:600px;margin:0 auto;padding:36px 20px 48px">
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  color:#141412;background:#E8E6E1;margin:0;padding:0">
 
-    <!-- Header -->
-    <div style="text-align:center;margin-bottom:36px">
-      <p style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;
-        color:#888;margin:0 0 6px">Comune di Pieve Emanuele</p>
-      <h1 style="font-size:22px;font-weight:600;color:#123785;margin:0 0 4px">
-        Albo in chiaro</h1>
-      <p style="font-size:13px;color:#636158;margin:0">{_esc(oggi)}</p>
-    </div>
+  <!-- Header blu -->
+  <div style="background:#123785;padding:36px 24px 32px;text-align:center">
+    <p style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+      color:rgba(255,255,255,.65);margin:0 0 10px">Comune di Pieve Emanuele</p>
+    <h1 style="font-size:26px;font-weight:700;color:#ffffff;margin:0 0 8px;
+      letter-spacing:-.02em">Albo in chiaro</h1>
+    <p style="font-size:13px;color:rgba(255,255,255,.75);margin:0">{_esc(oggi)}</p>
+  </div>
+
+  <!-- Corpo -->
+  <div style="max-width:600px;margin:0 auto;padding:32px 20px 48px">
 
     <!-- Intro -->
-    <p style="font-size:14px;color:#444;line-height:1.7;margin:0 0 28px">
+    <p style="font-size:14px;color:#444;line-height:1.75;margin:0 0 28px">
       {intro}
     </p>
 
@@ -108,9 +118,9 @@ def costruisci_email(atti: list[dict], oggi: str) -> tuple[str, str]:
 
     <!-- Footer -->
     <div style="margin-top:40px;padding-top:20px;
-      border-top:1px solid rgba(0,0,0,.08);text-align:center">
-      <p style="font-size:11px;color:#888;line-height:1.7;margin:0">
-        <a href="{SITO_URL}" style="color:#123785;text-decoration:none">
+      border-top:1px solid rgba(0,0,0,.10);text-align:center">
+      <p style="font-size:11px;color:#888;line-height:1.8;margin:0">
+        <a href="{SITO_URL}" style="color:#1B4FCA;text-decoration:none;font-weight:500">
           Visita il sito</a>
         &nbsp;·&nbsp;
         Progetto civico indipendente, non affiliato al Comune di Pieve Emanuele
@@ -121,7 +131,7 @@ def costruisci_email(atti: list[dict], oggi: str) -> tuple[str, str]:
 </body>
 </html>"""
 
-    subject = f"Albo Pretorio PE — {n} {'atto' if n == 1 else 'atti'} nuovi · {oggi}"
+    subject = f"Albo in chiaro — {n} {'atto' if n == 1 else 'atti'} {'nuovo' if n == 1 else 'nuovi'} · {oggi}"
     return subject, body
 
 
