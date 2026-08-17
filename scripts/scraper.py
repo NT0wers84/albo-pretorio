@@ -817,7 +817,8 @@ def genera_riassunto(atto: dict) -> str:
     testo        = atto.get("testo_combinato", "")
     n_allegati   = atto.get("n_allegati_totali", 0)
 
-    # Groq free tier: limite 12.000 token/minuto per llama-3.3-70b-versatile.
+    # Groq ha dismesso llama-3.3-70b-versatile il 16/08/2026 (vedi
+    # console.groq.com/docs/deprecations). Sostituto ufficiale: openai/gpt-oss-120b.
     # Il testo italiano è circa 3-4 caratteri per token.
     # Tronchiamo a 20.000 caratteri (~5.500 token) per stare larghi col prompt.
     TESTO_MAX_CHARS = 20_000
@@ -853,7 +854,7 @@ REGOLE OBBLIGATORIE:
     for tentativo in (1, 2):
         try:
             risposta = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"),
                 max_tokens=300,
                 messages=[{"role": "user", "content": prompt}]
             )
