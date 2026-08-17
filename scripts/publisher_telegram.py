@@ -104,9 +104,8 @@ def invia_messaggio(token: str, chat_id: str, testo: str) -> bool:
             return True
         else:
             log.error(f"Telegram API error: {data.get('description', 'unknown')}")
-            # Fallback: invia come testo semplice
-            payload["parse_mode"] = "HTML"
-            payload["text"] = testo.replace("\\", "").replace("*", "<b>").replace("_", "<i>")
+            payload.pop("parse_mode", None)
+            payload["text"] = testo.replace("\\", "")
             resp2 = requests.post(url, json=payload, timeout=30)
             return resp2.json().get("ok", False)
     except Exception as e:

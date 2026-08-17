@@ -493,48 +493,6 @@ def elabora_atto(atto: dict) -> dict:
     return atto
 
 
-def _ottieni_p_auth_fresco(url_dettaglio: str) -> str:
-    """
-    Visita la pagina di dettaglio dell'atto per estrarre un p_auth token fresco.
-    Liferay genera il token lato server per ogni sessione; il token salvato nello
-    url_dettaglio può essere scaduto se usato in un run diverso.
-
-    Strategie di estrazione (in ordine):
-    1. Meta tag <meta name="p_auth" content="...">
-    2. Pattern Liferay.authToken = "..." nello script inline
-    3. p_auth= in qualsiasi link interno alla pagina
-    """
-    try:
-        resp = SESSION.get(url_dettaglio, timeout=30)
-        if resp.status_code != 200:
-            log.debug(f"  p_auth fresco: status {resp.status_code} da {url_dettaglio}")
-            return ""
-        html = resp.text
-
-        # 1. Meta tag
-        m = re.search(r'<meta[^>]+name=["\']p_auth["\'][^>]+content=["\']([^"\']+)["\']', html, re.I)
-        if m:
-            log.debug(f"  p_auth fresco da meta tag: {m.group(1)}")
-            return m.group(1)
-
-        # 2. Liferay.authToken JS
-        m = re.search(r'Liferay\.authToken\s*=\s*["\']([^"\']+)["\']', html)
-        if m:
-            log.debug(f"  p_auth fresco da Liferay.authToken: {m.group(1)}")
-            return m.group(1)
-
-        # 3. p_auth= in link interni
-        m = re.search(r'p_auth=([A-Za-z0-9_\-]+)', html)
-        if m:
-            log.debug(f"  p_auth fresco da link: {m.group(1)}")
-            return m.group(1)
-
-        log.debug("  p_auth fresco: non trovato nella pagina di dettaglio")
-    except Exception as e:
-        log.debug(f"  p_auth fresco: errore {e}")
-    return ""
-
-
 def _estrai_testo_inline_html(soup: BeautifulSoup) -> str:
     """
     Estrae il testo del corpo dell'atto quando è incorporato direttamente nell'HTML
@@ -828,7 +786,7 @@ def _ocr_pdf(percorso: Path) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. RIASSUNTO CON CLAUDE API
+# 6. RIASSUNTO AI (Groq / Llama)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def genera_riassunto(atto: dict) -> str:
@@ -899,36 +857,17 @@ REGOLE OBBLIGATORIE:
 # 7. SALVATAGGIO JSON
 # ─────────────────────────────────────────────────────────────────────────────
 
-def archivia_wayback(atto: dict) -> str:
-    """
-    Invia l'URL della pagina di dettaglio dell'atto al Wayback Machine
-    (Internet Archive) e restituisce l'URL della copia archiviata.
+CAMPI_ARCHIVIO = (
+    "numero_raw", "numero", "anno", "tipo", "tipo_norm",
+    "oggetto", "data_inizio", "data_fine",
+    "url_dettaglio", "id_atto", "riassunto",
+    "n_allegati_totali", "data_elaborazione", "pdf_versione",
+)
 
-    API: POST https://web.archive.org/save/<url>
-    Risposta: header 'Content-Location' con il percorso /web/YYYYMMDDHHMMSS/url
-    Gratuita, nessuna autenticazione richiesta.
-    """
-    url = atto.get("url_dettaglio", "")
-    if not url:
-        return ""
 
-    save_url = f"https://web.archive.org/save/{url}"
-    try:
-        resp = SESSION.post(save_url, timeout=30, allow_redirects=True)
-        # L'archivio risponde con Content-Location: /web/20260628.../url
-        location = resp.headers.get("Content-Location", "")
-        if location:
-            archived = f"https://web.archive.org{location}"
-            log.info(f"  Wayback Machine: {archived[:80]}")
-            return archived
-        # Fallback: costruisci l'URL dalla risposta finale
-        if "web.archive.org/web/" in resp.url:
-            log.info(f"  Wayback Machine (redirect): {resp.url[:80]}")
-            return resp.url
-        log.warning(f"  Wayback Machine: risposta non attesa ({resp.status_code})")
-    except Exception as e:
-        log.warning(f"  Wayback Machine: errore ({e})")
-    return ""
+def sanitizza_atto_per_archivio(atto: dict) -> dict:
+    """Tiene solo i campi necessari al sito, RSS e publisher (no testo PDF)."""
+    return {k: atto[k] for k in CAMPI_ARCHIVIO if k in atto}
 
 
 def salva_risultati(nuovi_atti: list[dict]):
@@ -947,8 +886,8 @@ def salva_risultati(nuovi_atti: list[dict]):
         except json.JSONDecodeError:
             archivio = []
 
-    # Aggiunge i nuovi atti in testa
-    archivio = nuovi_atti + archivio
+    nuovi_puliti = [sanitizza_atto_per_archivio(a) for a in nuovi_atti]
+    archivio = nuovi_puliti + archivio
 
     with open(ATTI_JSON, "w", encoding="utf-8") as f:
         json.dump(archivio, f, ensure_ascii=False, indent=2)
@@ -956,8 +895,8 @@ def salva_risultati(nuovi_atti: list[dict]):
 
     # Solo i nuovi
     with open(NUOVI_ATTI_JSON, "w", encoding="utf-8") as f:
-        json.dump(nuovi_atti, f, ensure_ascii=False, indent=2)
-    log.info(f"Nuovi atti scritti in {NUOVI_ATTI_JSON}: {len(nuovi_atti)}")
+        json.dump(nuovi_puliti, f, ensure_ascii=False, indent=2)
+    log.info(f"Nuovi atti scritti in {NUOVI_ATTI_JSON}: {len(nuovi_puliti)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1117,8 +1056,9 @@ def main():
                     else:
                         log.warning(f"  → Nessun testo disponibile, riassunto saltato")
 
+            atti_puliti = [sanitizza_atto_per_archivio(a) for a in atti_salvati]
             atti_json_path.write_text(
-                json.dumps(atti_salvati, ensure_ascii=False, indent=2),
+                json.dumps(atti_puliti, ensure_ascii=False, indent=2),
                 encoding="utf-8"
             )
             log.info("Atti riprocessati e salvati.")
@@ -1138,10 +1078,9 @@ def main():
 
         atto = elabora_atto(atto)
         atto["riassunto"] = genera_riassunto(atto)
-        atto["url_archivio"] = archivia_wayback(atto)
         atto["data_elaborazione"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        atti_elaborati.append(atto)
+        atti_elaborati.append(sanitizza_atto_per_archivio(atto))
         time.sleep(1)  # pausa tra gli atti per non sovraccaricare il server
 
     # 5. Salva i risultati

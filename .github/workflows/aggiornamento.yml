@@ -1,11 +1,7 @@
 name: Albo Pretorio — Aggiornamento Giornaliero
 
 on:
-  # Avvio manuale dalla tab "Actions" di GitHub
   workflow_dispatch:
-
-  # Automatico ogni giorno alle 15:00 UTC (= ~17:00 ora italiana, tenendo conto
-  # del ritardo di ~2h tipico di GitHub Actions sui runner condivisi)
   schedule:
     - cron: '0 15 * * *'
 
@@ -17,66 +13,63 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # 1. Scarica il codice dal repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Installa dipendenze di sistema (Tesseract OCR + Poppler per PDF)
       - name: Installa Tesseract e Poppler
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y tesseract-ocr tesseract-ocr-ita poppler-utils
 
-      # 3. Configura Python
       - name: Configura Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # 4. Installa dipendenze Python
       - name: Installa dipendenze Python
         run: pip install -r requirements.txt
 
-      # 5. Esegui lo scraper (con retry automatico se il sito è irraggiungibile)
       - name: Esegui scraper
+        id: scraper
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           for i in 1 2 3; do
-            python scripts/scraper.py && break
+            python scripts/scraper.py && exit 0
             echo "Tentativo $i fallito, riprovo tra 60 secondi..."
             sleep 60
           done
+          exit 1
 
-      # 6. Mostra i risultati nel log
       - name: Mostra nuovi atti trovati
+        if: success()
         run: |
           echo "=== NUOVI ATTI TROVATI ==="
           python scripts/mostra_risultati.py
 
-      # 7. Pubblica su Telegram (solo se ci sono atti nuovi)
       - name: Pubblica su Telegram
+        if: success()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: python scripts/publisher_telegram.py
 
-      # 8. Pubblica newsletter email via Buttondown (solo se ci sono atti nuovi)
       - name: Pubblica newsletter email
+        if: success()
         env:
           BUTTONDOWN_API_KEY: ${{ secrets.BUTTONDOWN_API_KEY }}
         run: python scripts/publisher_email.py
 
-      # 9. Aggiorna il sito standalone con i dati freschi
-      - name: Aggiorna sito GitHub Pages
-        run: python scripts/aggiorna_standalone.py
+      - name: Genera sito GitHub Pages
+        if: success()
+        run: python scripts/genera_sito.py
 
-      # 10. Genera il feed RSS (ultimi 30 giorni)
       - name: Genera feed RSS
+        if: success()
         run: python scripts/genera_rss.py
 
-      # 11. Salva tutto nel repository (dati + sito)
       - name: Salva risultati nel repository
+        if: success()
         run: |
           git config user.name "AlboPretorioBot"
           git config user.email "bot@albo-pretorio.local"
