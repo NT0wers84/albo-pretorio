@@ -214,6 +214,7 @@ main{{max-width:860px;margin:0 auto;padding:28px 16px 64px}}
   display:inline-flex;align-items:center;gap:3px;
 }}
 .empty{{font-size:13px;color:var(--hint);padding:24px 0;font-style:italic;text-align:center}}
+.cal-wrap{{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}}
 .cal-grid{{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}}
 .ch{{font-size:11px;color:var(--hint);text-align:center;padding:6px 0;font-weight:600}}
 .cd{{
@@ -323,7 +324,7 @@ footer a:hover{{text-decoration:underline}}
   <div class="grid" id="cards"></div>
 
   <p class="sec-label">Calendario — {nome_mese}</p>
-  <div class="cal-grid">{giorni_hdr}{celle}</div>
+  <div class="cal-wrap"><div class="cal-grid">{giorni_hdr}{celle}</div></div>
   <div id="pannello">
     <div id="pannello-hdr">
       <h4 id="pannello-titolo"></h4>
