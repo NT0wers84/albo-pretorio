@@ -5,7 +5,6 @@ Sostituisce aggiorna_standalone.py: niente patch su bundle, HTML rigenerato ogni
 
 import json
 import html
-import calendar
 from pathlib import Path
 from datetime import date, datetime, timedelta
 from collections import defaultdict
@@ -71,7 +70,6 @@ def genera_html(atti: list[dict]) -> str:
     anno = oggi.year
     mese = oggi.month
     data_agg = datetime.now().strftime("%d/%m/%Y %H:%M")
-    nome_mese = datetime(anno, mese, 1).strftime("%B %Y").capitalize()
 
     n_tot = len(atti)
     n_mese = sum(1 for a in atti if (a.get("data_inizio") or "").startswith(f"{anno}-{mese:02d}"))
@@ -87,25 +85,8 @@ def genera_html(atti: list[dict]) -> str:
     all_atti_js = json.dumps([atto_to_js(a, i) for i, a in enumerate(atti)], ensure_ascii=False)
     atti_counts_js = json.dumps(atti_counts, ensure_ascii=False)
 
-    cal_matrix = calendar.monthcalendar(anno, mese)
-    giorni_hdr = "".join(f'<div class="ch">{g}</div>' for g in ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"])
-
-    celle = ""
-    for settimana in cal_matrix:
-        for g in settimana:
-            if g == 0:
-                celle += '<div class="cd vuoto"></div>'
-                continue
-            dk = f"{anno}-{mese:02d}-{g:02d}"
-            n = atti_counts.get(dk, 0)
-            cls = "cd"
-            if g == oggi.day:
-                cls += " oggi"
-            if n > 0:
-                cls += " ha-atti"
-                celle += f'<div class="{cls}" data-dk="{dk}">{g}<span class="dot">{n}</span></div>'
-            else:
-                celle += f'<div class="{cls}">{g}</div>'
+    # Il calendario è renderizzato interamente lato client (JS) per permettere
+    # la navigazione avanti/indietro tra i mesi senza ricaricare la pagina.
 
     filtri_html = "".join(
         f'<button class="chip{" active" if v == "" else ""}" data-tipo="{html.escape(v)}">{html.escape(label)}</button>'
@@ -214,6 +195,15 @@ main{{max-width:860px;margin:0 auto;padding:28px 16px 64px}}
   display:inline-flex;align-items:center;gap:3px;
 }}
 .empty{{font-size:13px;color:var(--hint);padding:24px 0;font-style:italic;text-align:center}}
+.cal-hdr{{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}}
+.cal-hdr .sec-label{{margin-bottom:0}}
+.cal-nav{{display:flex;gap:6px}}
+.cal-nav button{{
+  width:26px;height:26px;border-radius:50%;border:1px solid var(--border);
+  background:var(--surface);color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:13px;
+}}
+.cal-nav button:hover{{border-color:var(--acc);color:var(--acc)}}
 .cal-wrap{{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}}
 .cal-grid{{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}}
 .ch{{font-size:11px;color:var(--hint);text-align:center;padding:6px 0;font-weight:600}}
@@ -221,7 +211,7 @@ main{{max-width:860px;margin:0 auto;padding:28px 16px 64px}}
   font-size:13px;text-align:center;padding:10px 2px;border-radius:8px;
   color:var(--muted);position:relative;user-select:none;
 }}
-.cd.ha-atti{{color:var(--acc);font-weight:600;cursor:pointer;background:var(--acc-bg)}}
+.cd.ha-atti{{color:var(--acc);font-weight:600;cursor:pointer;background:var(--acc-bg);border:1px solid rgba(27,79,202,.35)}}
 .cd.ha-atti:hover{{opacity:.85}}
 .cd.oggi{{outline:2px solid var(--acc);color:var(--text);font-weight:600}}
 .cd.vuoto{{pointer-events:none}}
@@ -323,8 +313,14 @@ footer a:hover{{text-decoration:underline}}
   </div>
   <div class="grid" id="cards"></div>
 
-  <p class="sec-label">Calendario — {nome_mese}</p>
-  <div class="cal-wrap"><div class="cal-grid">{giorni_hdr}{celle}</div></div>
+  <div class="cal-hdr">
+    <p class="sec-label" id="cal-label">Calendario</p>
+    <div class="cal-nav">
+      <button id="cal-prev" aria-label="Mese precedente" type="button"><i class="ti ti-chevron-left"></i></button>
+      <button id="cal-next" aria-label="Mese successivo" type="button"><i class="ti ti-chevron-right"></i></button>
+    </div>
+  </div>
+  <div class="cal-wrap"><div class="cal-grid" id="cal-grid"></div></div>
   <div id="pannello">
     <div id="pannello-hdr">
       <h4 id="pannello-titolo"></h4>
@@ -490,11 +486,56 @@ document.addEventListener('click', e => {{
   const btn = e.target.closest('.rias-toggle');
   if (btn) openModal(parseInt(btn.dataset.idx, 10));
 }});
-document.querySelectorAll('.cd.ha-atti').forEach(el => {{
-  el.addEventListener('click', () => apriGiorno(el.dataset.dk));
+const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio',
+  'Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const oggiReale = new Date();
+let calYear = oggiReale.getFullYear();
+let calMonth = oggiReale.getMonth();
+
+function pad2(n) {{ return String(n).padStart(2, '0'); }}
+
+function renderCalendar() {{
+  document.getElementById('cal-label').textContent = `Calendario — ${{MESI[calMonth]}} ${{calYear}}`;
+  const primoGiorno = new Date(calYear, calMonth, 1).getDay();
+  const offset = primoGiorno === 0 ? 6 : primoGiorno - 1;
+  const giorniMese = new Date(calYear, calMonth + 1, 0).getDate();
+
+  let html = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom']
+    .map(g => `<div class="ch">${{g}}</div>`).join('');
+  for (let i = 0; i < offset; i++) html += '<div class="cd vuoto"></div>';
+  for (let d = 1; d <= giorniMese; d++) {{
+    const dk = `${{calYear}}-${{pad2(calMonth + 1)}}-${{pad2(d)}}`;
+    const n = ATTI_COUNTS[dk] || 0;
+    let cls = 'cd';
+    if (calYear === oggiReale.getFullYear() && calMonth === oggiReale.getMonth() && d === oggiReale.getDate()) {{
+      cls += ' oggi';
+    }}
+    if (n > 0) {{
+      cls += ' ha-atti';
+      html += `<div class="${{cls}}" data-dk="${{dk}}">${{d}}<span class="dot">${{n}}</span></div>`;
+    }} else {{
+      html += `<div class="${{cls}}">${{d}}</div>`;
+    }}
+  }}
+  document.getElementById('cal-grid').innerHTML = html;
+  document.querySelectorAll('.cd.ha-atti').forEach(el => {{
+    el.addEventListener('click', () => apriGiorno(el.dataset.dk));
+  }});
+}}
+
+document.getElementById('cal-prev').addEventListener('click', () => {{
+  calMonth--;
+  if (calMonth < 0) {{ calMonth = 11; calYear--; }}
+  renderCalendar();
+}});
+document.getElementById('cal-next').addEventListener('click', () => {{
+  calMonth++;
+  if (calMonth > 11) {{ calMonth = 0; calYear++; }}
+  renderCalendar();
 }});
 
 renderCards();
+renderCalendar();
 </script>
 </body>
 </html>"""

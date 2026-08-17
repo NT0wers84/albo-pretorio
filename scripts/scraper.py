@@ -455,30 +455,41 @@ def elabora_atto(atto: dict) -> dict:
     atto["n_allegati_totali"] = len(link_pdf)
     testi_pdf = []
 
-    # Leggi solo il primo allegato (il documento principale dell'atto).
-    # Gli allegati successivi sono tipicamente elaborati tecnici (computi metrici,
-    # planimetrie, capitolati) che appesantiscono il testo senza utilità per il
-    # riassunto. Il numero totale è salvato in n_allegati_totali.
-    for i, url_pdf in enumerate(link_pdf[:1], start=1):
+    # Normalmente leggiamo solo il primo allegato (il documento principale
+    # dell'atto). Gli allegati successivi sono tipicamente elaborati tecnici
+    # (computi metrici, planimetrie, capitolati) che appesantiscono il testo
+    # senza utilità per il riassunto.
+    # Se però il primo allegato fallisce (download non riuscito, es. file
+    # firmato .p7m invece del PDF, errore di rete transitorio), proviamo il
+    # successivo invece di rinunciare del tutto — meglio un riassunto basato
+    # su un allegato secondario che nessun riassunto.
+    for i, url_pdf in enumerate(link_pdf[:2], start=1):
         nome_file = f"allegato_{i}.pdf"
         percorso  = cartella_atto / nome_file
 
         ok = _scarica_pdf(url_pdf, percorso)
         if not ok:
-            continue
+            if i == 1 and len(link_pdf) > 1:
+                log.warning(f"  ⚠ Allegato principale non scaricabile, provo il successivo")
+                continue
+            break
 
         testo = _estrai_testo_pdf(percorso)
-        testi_pdf.append(testo)
+        if not testo.strip() and i == 1 and len(link_pdf) > 1:
+            log.warning(f"  ⚠ Allegato principale senza testo estraibile, provo il successivo")
+            continue
 
+        testi_pdf.append(testo)
         atto["allegati"].append({
             "nome": nome_file,
             "url_originale": url_pdf,
             "percorso_locale": str(percorso),
             "caratteri": len(testo),
         })
+        break  # trovato un allegato leggibile, ci fermiamo qui
 
     if len(link_pdf) > 1:
-        log.info(f"  → Letto solo allegato principale ({len(link_pdf)} allegati totali disponibili)")
+        log.info(f"  → Letto 1 allegato su {len(link_pdf)} totali disponibili")
 
     # Se non ci sono PDF, estrai testo inline dall'HTML della pagina di dettaglio.
     # Il portlet JCityGov per alcuni atti (delibere, ordinanze) incorpora il testo
@@ -838,19 +849,22 @@ REGOLE OBBLIGATORIE:
 4. Se ci sono allegati tecnici aggiuntivi, concludi con una riga tipo "Gli allegati tecnici sono consultabili sul sito del Comune." — solo se davvero rilevante per il tipo di atto.
 5. Usa un tono neutro e informativo. Inizia direttamente con il riassunto, senza intestazioni o prefazioni."""
 
-    try:
-        client = Groq(api_key=api_key)
-        risposta = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        riassunto = risposta.choices[0].message.content.strip()
-        log.info(f"  ✓ Riassunto generato ({len(riassunto)} char)")
-        return riassunto
-    except Exception as e:
-        log.error(f"  Errore Groq API: {e}")
-        return ""
+    client = Groq(api_key=api_key)
+    for tentativo in (1, 2):
+        try:
+            risposta = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                max_tokens=300,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            riassunto = risposta.choices[0].message.content.strip()
+            log.info(f"  ✓ Riassunto generato ({len(riassunto)} char)")
+            return riassunto
+        except Exception as e:
+            log.error(f"  Errore Groq API (tentativo {tentativo}/2): {e}")
+            if tentativo == 1:
+                time.sleep(5)
+    return ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
