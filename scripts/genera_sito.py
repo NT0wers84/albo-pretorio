@@ -1,6 +1,10 @@
 """
 genera_sito.py — Genera docs/index.html dall'archivio atti.
 Sostituisce aggiorna_standalone.py: niente patch su bundle, HTML rigenerato ogni run.
+
+Palette e spaziature allineate al design originale (Claude Design bundle,
+vedi backup pre-refactor) per mantenere continuità estetica pur generando
+l'HTML da zero invece che tramite patch.
 """
 
 import json
@@ -101,16 +105,21 @@ def genera_html(atti: list[dict]) -> str:
 <title>Albo in chiaro — Pieve Emanuele</title>
 <meta name="description" content="Atti dell'Albo Pretorio del Comune di Pieve Emanuele spiegati in parole semplici. Progetto civico indipendente.">
 <link rel="alternate" type="application/rss+xml" title="Albo Pretorio — Pieve Emanuele" href="{FEED_URL}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 :root{{
-  --bg:#E8E6E1;--surface:#fff;--border:rgba(0,0,0,.10);
-  --text:#141412;--muted:#636158;--hint:#888;
-  --acc:#1B4FCA;--header:#123785;
-  --acc-bg:#EEF2FF;--dan-bg:#fde8e8;--dan-fg:#b91c1c;
+  --bg:#F2F1ED;--surface:#fff;--panel-bg:#F9F8F5;
+  --border:rgba(0,0,0,.08);--border-soft:rgba(0,0,0,.07);
+  --text:#141412;--muted:#636158;--hint:#B0AEA8;
+  --acc:#1B4FCA;--acc-bg:#EEF3FD;--acc-border:#C7D9FA;
+  --active:#17261E;--header:#123785;
+  --dan-bg:#fde8e8;--dan-fg:#b91c1c;
   --suc-bg:#e6f4ea;--suc-fg:#166534;--war-bg:#fef3cd;--war-fg:#92400e;
-  --pro-bg:#f0ebfe;--pro-fg:#5b21b6;--radius:12px;
+  --pro-bg:#f0ebfe;--pro-fg:#5b21b6;--radius:14px;
 }}
 body{{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
@@ -119,54 +128,64 @@ body{{
 }}
 header{{
   background:var(--header);color:#fff;text-align:center;
-  padding:48px 20px 40px;
+  padding:56px 24px 48px;
 }}
 header .cap{{
-  font-size:10px;letter-spacing:.14em;text-transform:uppercase;
-  color:rgba(255,255,255,.65);margin-bottom:10px;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(255,255,255,.9);font-weight:600;margin-bottom:18px;
 }}
-header h1{{font-size:42px;font-weight:700;letter-spacing:-.03em;margin-bottom:6px}}
-header .sub{{font-size:15px;color:rgba(255,255,255,.85);margin-bottom:14px}}
+header h1{{
+  font-family:'DM Serif Display',Georgia,serif;font-size:48px;font-weight:400;
+  letter-spacing:-.01em;line-height:1;margin-bottom:14px;
+}}
+header .sub{{font-size:15px;color:#fff;opacity:.95;margin-bottom:7px}}
 header .desc{{
-  font-size:13px;color:rgba(255,255,255,.75);max-width:560px;
-  margin:0 auto 28px;line-height:1.7;
+  font-size:12px;color:rgba(255,255,255,.85);max-width:560px;
+  margin:0 auto 40px;line-height:1.7;letter-spacing:.01em;
 }}
 .stats{{
-  display:inline-flex;border-radius:14px;overflow:hidden;
-  border:1px solid rgba(255,255,255,.15);
+  display:inline-flex;border-radius:16px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.15);
 }}
-.stat{{padding:16px 28px;background:rgba(255,255,255,.08);min-width:90px}}
-.stat+.stat{{border-left:1px solid rgba(255,255,255,.12)}}
+.stat{{padding:20px 40px;min-width:90px}}
+.stat+.stat{{border-left:1px solid rgba(255,255,255,.28)}}
 .stat-n{{font-size:34px;font-weight:400;line-height:1;margin-bottom:7px;letter-spacing:-.02em}}
 .stat-l{{
   font-size:10px;text-transform:uppercase;letter-spacing:.09em;
   color:rgba(255,255,255,.9);font-weight:600;
 }}
-main{{max-width:860px;margin:0 auto;padding:28px 16px 64px}}
-.toolbar{{margin-bottom:22px}}
-.toolbar input{{
-  width:100%;padding:11px 14px;font-size:14px;border:1px solid var(--border);
-  border-radius:10px;background:var(--surface);font-family:inherit;
-  outline:none;color:var(--text);
-}}
-.toolbar input:focus{{border-color:var(--acc)}}
-.chips{{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 6px}}
-.chip{{
-  font-size:12px;padding:6px 14px;border-radius:100px;cursor:pointer;
-  border:1px solid var(--border);background:var(--surface);color:var(--muted);
-  font-family:inherit;transition:all .12s;
-}}
-.chip:hover{{border-color:rgba(0,0,0,.2)}}
-.chip.active{{background:var(--acc-bg);color:var(--acc);border-color:var(--acc);font-weight:600}}
+main{{max-width:920px;margin:0 auto;padding:38px 20px 80px}}
 .sec-label{{
-  font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--hint);margin-bottom:12px;
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--hint);margin-bottom:16px;padding-bottom:10px;
+  border-bottom:0.5px solid rgba(0,0,0,.09);
 }}
-.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:32px}}
+.chips{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:32px;align-items:center}}
+.chip{{
+  font-size:13px;padding:8px 18px;border-radius:100px;cursor:pointer;
+  border:1.5px solid rgba(0,0,0,.1);background:var(--surface);color:var(--muted);
+  font-family:inherit;font-weight:500;line-height:1.2;outline:none;transition:all .15s;
+}}
+.chip.active{{background:var(--active);color:#fff;border-color:var(--active)}}
+.toolbar{{margin-bottom:24px;position:relative}}
+.toolbar i.ti-search{{
+  position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  font-size:15px;color:var(--hint);pointer-events:none;
+}}
+.toolbar input{{
+  width:100%;padding:12px 14px 12px 42px;font-size:14px;border:0.5px solid rgba(0,0,0,.1);
+  border-radius:12px;background:var(--surface);font-family:inherit;
+  outline:none;color:var(--text);transition:border-color .15s;
+}}
+.toolbar input:focus{{border-color:rgba(23,38,30,.4);box-shadow:0 0 0 3px rgba(23,38,30,.07)}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:44px}}
 .card{{
-  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  padding:16px 18px;display:flex;flex-direction:column;
+  background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);
+  padding:18px 20px;display:flex;flex-direction:column;
+  transition:border-color .12s,box-shadow .12s;
 }}
+.card:hover{{border-color:rgba(0,0,0,.18);box-shadow:0 2px 10px rgba(0,0,0,.06)}}
+.card.panel-card{{background:var(--panel-bg);border-color:var(--border-soft);padding:16px 18px}}
 .pill{{
   display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;
   padding:4px 10px;border-radius:100px;margin-bottom:10px;width:fit-content;
@@ -179,7 +198,7 @@ main{{max-width:860px;margin:0 auto;padding:28px 16px 64px}}
 .pill-war{{background:var(--war-bg);color:var(--war-fg)}}
 .pill-pro{{background:var(--pro-bg);color:var(--pro-fg)}}
 .pill-neu{{background:var(--bg);color:var(--muted)}}
-.card-title{{font-size:14px;font-weight:600;line-height:1.45;margin-bottom:8px;flex:1}}
+.card-title{{font-size:13px;font-weight:500;line-height:1.55;color:var(--text);margin-bottom:8px;flex:1}}
 .card-rias{{font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:10px}}
 .rias-toggle{{
   display:inline;background:none;border:none;padding:0;cursor:pointer;
@@ -187,48 +206,71 @@ main{{max-width:860px;margin:0 auto;padding:28px 16px 64px}}
 }}
 .card-foot{{
   display:flex;justify-content:space-between;align-items:center;
-  margin-top:auto;padding-top:10px;border-top:1px solid var(--border);
+  margin-top:auto;padding-top:10px;border-top:0.5px solid var(--border-soft);
 }}
 .card-data{{font-size:11px;color:var(--hint)}}
 .card-link{{
   font-size:11px;color:var(--acc);text-decoration:none;font-weight:500;
   display:inline-flex;align-items:center;gap:3px;
 }}
-.empty{{font-size:13px;color:var(--hint);padding:24px 0;font-style:italic;text-align:center}}
-.cal-hdr{{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}}
-.cal-hdr .sec-label{{margin-bottom:0}}
-.cal-nav{{display:flex;gap:6px}}
+.empty{{
+  text-align:center;padding:36px 20px;color:var(--hint);font-size:14px;
+  background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);
+  margin-bottom:44px;
+}}
+.empty i{{font-size:28px;display:block;margin-bottom:10px;opacity:.5}}
+.cal-hdr{{margin-bottom:0}}
+.cal-card{{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:26px;margin-bottom:16px}}
+.cal-nav{{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}}
 .cal-nav button{{
-  width:26px;height:26px;border-radius:50%;border:1px solid var(--border);
-  background:var(--surface);color:var(--muted);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;font-size:13px;
+  background:none;border:0.5px solid rgba(0,0,0,.1);border-radius:8px;
+  padding:8px 14px;cursor:pointer;color:var(--muted);font-family:inherit;
+  line-height:1;display:inline-flex;align-items:center;
 }}
-.cal-nav button:hover{{border-color:var(--acc);color:var(--acc)}}
-.cal-wrap{{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}}
-.cal-grid{{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}}
-.ch{{font-size:11px;color:var(--hint);text-align:center;padding:6px 0;font-weight:600}}
+.cal-nav button:hover{{border-color:var(--active);color:var(--active)}}
+.cal-month{{font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.01em}}
+.cal-grid{{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px}}
+.ch{{
+  font-size:10px;text-align:center;color:var(--hint);font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;padding:4px 0;
+}}
 .cd{{
-  font-size:13px;text-align:center;padding:10px 2px;border-radius:8px;
-  color:var(--muted);position:relative;user-select:none;
+  position:relative;text-align:center;padding:10px 2px;border-radius:8px;
+  font-size:13px;line-height:1;user-select:none;color:var(--hint);
 }}
-.cd.ha-atti{{color:var(--acc);font-weight:600;cursor:pointer;background:var(--acc-bg);border:1px solid rgba(27,79,202,.35)}}
-.cd.ha-atti:hover{{opacity:.85}}
-.cd.oggi{{outline:2px solid var(--acc);color:var(--text);font-weight:600}}
+.cd.oggi{{outline:1.5px solid rgba(0,0,0,.22);outline-offset:-1px;color:var(--text);font-weight:600}}
+.cd.ha-atti{{
+  background:var(--acc-bg);color:var(--acc);font-weight:600;cursor:pointer;
+}}
+.cd.ha-atti:hover{{filter:brightness(.97)}}
+.cd.selected{{background:var(--active)!important;color:#fff!important;outline:none}}
 .cd.vuoto{{pointer-events:none}}
 .dot{{
-  position:absolute;bottom:2px;left:50%;transform:translateX(-50%);
-  font-size:9px;color:var(--acc);font-weight:700;
+  position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
+  font-size:8px;font-weight:700;line-height:1;color:inherit;
 }}
+.cal-legend{{display:flex;gap:20px;margin-top:18px;padding-top:14px;border-top:0.5px solid rgba(0,0,0,.07);flex-wrap:wrap}}
+.cal-legend-item{{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--hint)}}
+.cal-legend-sw{{width:12px;height:12px;border-radius:3px;flex-shrink:0}}
+.cal-legend-sw.atti{{background:var(--acc-bg);border:1px solid var(--acc-border)}}
+.cal-legend-sw.oggi{{border:1.5px solid rgba(0,0,0,.22)}}
+.cal-legend-sw.sel{{background:var(--active)}}
 #pannello{{
-  display:none;margin-top:16px;background:var(--surface);
-  border:1px solid var(--border);border-radius:var(--radius);padding:18px;
+  display:none;background:var(--surface);
+  border:0.5px solid var(--border);border-radius:var(--radius);padding:24px;
 }}
-#pannello-hdr{{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}}
-#pannello-hdr h4{{font-size:15px;font-weight:600}}
+#pannello-hdr{{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}}
+#pannello-eyebrow{{
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--hint);margin-bottom:5px;
+}}
+#pannello-hdr h4{{font-size:17px;font-weight:400;color:var(--text);letter-spacing:-.01em}}
 #pannello-close{{
-  background:none;border:none;cursor:pointer;font-size:18px;
-  color:var(--hint);padding:0 4px;
+  background:none;border:0.5px solid rgba(0,0,0,.13);cursor:pointer;font-size:12px;
+  color:var(--muted);padding:7px 14px;border-radius:8px;font-family:inherit;
+  font-weight:500;flex-shrink:0;margin-top:2px;
 }}
+#pannello-body{{display:flex;flex-direction:column;gap:10px}}
 #rias-ov{{
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;
   align-items:center;justify-content:center;padding:20px;
@@ -257,7 +299,7 @@ main{{max-width:860px;margin:0 auto;padding:28px 16px 64px}}
 }}
 footer{{
   text-align:center;padding:32px 20px 24px;font-size:12.5px;color:var(--muted);
-  border-top:1px solid var(--border);max-width:860px;margin:0 auto;
+  border-top:1px solid var(--border);max-width:920px;margin:0 auto;
 }}
 footer a{{color:#555350;text-decoration:none}}
 footer a:hover{{text-decoration:underline}}
@@ -280,12 +322,14 @@ footer a:hover{{text-decoration:underline}}
 }}
 @media(max-width:640px){{
   header{{padding:36px 16px 32px}}
-  header h1{{font-size:32px}}
+  header h1{{font-size:34px}}
   .stats{{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;max-width:100%}}
   .stat{{padding:14px 20px;min-width:72px;flex-shrink:0}}
   .stat-n{{font-size:26px}}
   main{{padding:24px 14px 60px}}
   .grid{{grid-template-columns:1fr}}
+  .cal-card{{padding:18px 14px}}
+  #pannello{{padding:18px 14px}}
   #rias-box{{padding:20px 16px;border-radius:12px}}
 }}
 </style>
@@ -306,25 +350,38 @@ footer a:hover{{text-decoration:underline}}
 </header>
 
 <main>
-  <div class="toolbar">
-    <input type="search" id="q" placeholder="Cerca per oggetto o riassunto…" autocomplete="off">
-    <div class="chips" id="chips">{filtri_html}</div>
-    <p class="sec-label" id="sec-label">Ultimi 2 giorni</p>
-  </div>
-  <div class="grid" id="cards"></div>
+  <div class="chips" id="chips">{filtri_html}</div>
 
-  <div class="cal-hdr">
-    <p class="sec-label" id="cal-label">Calendario</p>
+  <div class="toolbar">
+    <i class="ti ti-search"></i>
+    <input type="search" id="q" placeholder="Cerca tra gli atti per parola chiave…" autocomplete="off">
+  </div>
+
+  <p class="sec-label" id="sec-label">Ultimi 2 giorni</p>
+  <div id="cards"></div>
+
+  <p class="sec-label" id="cal-label">Calendario</p>
+  <div class="cal-card">
     <div class="cal-nav">
       <button id="cal-prev" aria-label="Mese precedente" type="button"><i class="ti ti-chevron-left"></i></button>
+      <div class="cal-month" id="cal-month"></div>
       <button id="cal-next" aria-label="Mese successivo" type="button"><i class="ti ti-chevron-right"></i></button>
     </div>
+    <div class="cal-grid" id="cal-weekdays"></div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div class="cal-legend">
+      <div class="cal-legend-item"><div class="cal-legend-sw atti"></div>Giorni con atti — clicca per la vista giornaliera</div>
+      <div class="cal-legend-item"><div class="cal-legend-sw oggi"></div>Oggi</div>
+      <div class="cal-legend-item"><div class="cal-legend-sw sel"></div>Giorno selezionato</div>
+    </div>
   </div>
-  <div class="cal-wrap"><div class="cal-grid" id="cal-grid"></div></div>
   <div id="pannello">
     <div id="pannello-hdr">
-      <h4 id="pannello-titolo"></h4>
-      <button id="pannello-close" aria-label="Chiudi">&#x2715;</button>
+      <div>
+        <div id="pannello-eyebrow">Vista giornaliera</div>
+        <h4 id="pannello-titolo"></h4>
+      </div>
+      <button id="pannello-close" aria-label="Chiudi">✕ Chiudi</button>
     </div>
     <div id="pannello-body"></div>
   </div>
@@ -404,7 +461,7 @@ function attiFiltrati() {{
   return list.filter(a => a.dk && a.dk >= cut);
 }}
 
-function cardHTML(a) {{
+function cardHTML(a, variant) {{
   const [cls, icon] = pillFor(a.tipoNorm);
   const rias = a.riassunto || '';
   const short = rias.length > 165 ? rias.slice(0, 165) + '…' : rias;
@@ -415,7 +472,8 @@ function cardHTML(a) {{
   const riasBlock = rias
     ? `<p class="card-rias">${{short}}</p>${{hasMore ? `<button class="rias-toggle" data-idx="${{a.idx}}">leggi tutto</button>` : ''}}`
     : '';
-  return `<div class="card">
+  const cardCls = variant === 'panel' ? 'card panel-card' : 'card';
+  return `<div class="${{cardCls}}">
     <div class="pill ${{cls}}"><i class="ti ${{icon}}"></i>${{a.tipo}}</div>
     <h4 class="card-title">${{a.oggetto}}</h4>
     ${{riasBlock}}
@@ -431,25 +489,39 @@ function renderCards() {{
   const el = document.getElementById('cards');
   const lbl = document.getElementById('sec-label');
   if (query.trim()) {{
-    lbl.textContent = list.length ? `${{list.length}} risultati` : 'Nessun risultato';
+    lbl.textContent = list.length ? `Ricerca “${{query.trim()}}” · ${{list.length}} risultati` : `Ricerca “${{query.trim()}}” · nessun risultato`;
   }} else {{
-    lbl.textContent = 'Ultimi 2 giorni';
+    lbl.textContent = `Ultimi 2 giorni · ${{list.length}} atti`;
   }}
-  el.innerHTML = list.length ? list.map(cardHTML).join('') : '<p class="empty">Nessun atto in questo periodo. Prova la ricerca per esplorare l\\'archivio.</p>';
+  el.innerHTML = list.length
+    ? `<div class="grid">${{list.map(a => cardHTML(a)).join('')}}</div>`
+    : `<p class="empty"><i class="ti ti-search-off"></i>Nessun atto trovato. Prova la ricerca per esplorare l'archivio.</p>`;
 }}
 
+let selectedDay = null;
+
 function apriGiorno(dk) {{
+  if (selectedDay === dk) {{
+    selectedDay = null;
+    document.getElementById('pannello').style.display = 'none';
+    renderCalendar();
+    return;
+  }}
   const lista = ALL_ATTI.filter(a => a.dk === dk);
   if (!lista.length) return;
+  selectedDay = dk;
   const [,m,d] = dk.split('-');
   document.getElementById('pannello-titolo').textContent =
-    `Atti del ${{d}}/${{m}}/${{dk.slice(0,4)}} (${{lista.length}})`;
-  document.getElementById('pannello-body').innerHTML = lista.map(cardHTML).join('');
+    `${{parseInt(d,10)}}/${{m}}/${{dk.slice(0,4)}} · ${{lista.length}} atti`;
+  document.getElementById('pannello-body').innerHTML = lista.map(a => cardHTML(a, 'panel')).join('');
   document.getElementById('pannello').style.display = 'block';
+  renderCalendar();
 }}
 
 function chiudiPannello() {{
+  selectedDay = null;
   document.getElementById('pannello').style.display = 'none';
+  renderCalendar();
 }}
 
 function openModal(idx) {{
@@ -486,30 +558,38 @@ document.addEventListener('click', e => {{
   const btn = e.target.closest('.rias-toggle');
   if (btn) openModal(parseInt(btn.dataset.idx, 10));
 }});
+
 const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio',
   'Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const GIORNI_SETT = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
 const oggiReale = new Date();
 let calYear = oggiReale.getFullYear();
 let calMonth = oggiReale.getMonth();
 
+document.getElementById('cal-weekdays').innerHTML =
+  GIORNI_SETT.map(g => `<div class="ch">${{g}}</div>`).join('');
+
 function pad2(n) {{ return String(n).padStart(2, '0'); }}
 
 function renderCalendar() {{
-  document.getElementById('cal-label').textContent = `Calendario — ${{MESI[calMonth]}} ${{calYear}}`;
+  const nomeMese = MESI[calMonth].charAt(0).toUpperCase() + MESI[calMonth].slice(1);
+  document.getElementById('cal-label').textContent = `Calendario · ${{nomeMese}} ${{calYear}}`;
+  document.getElementById('cal-month').textContent = `${{nomeMese}} ${{calYear}}`;
+
   const primoGiorno = new Date(calYear, calMonth, 1).getDay();
   const offset = primoGiorno === 0 ? 6 : primoGiorno - 1;
   const giorniMese = new Date(calYear, calMonth + 1, 0).getDate();
 
-  let html = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom']
-    .map(g => `<div class="ch">${{g}}</div>`).join('');
+  let html = '';
   for (let i = 0; i < offset; i++) html += '<div class="cd vuoto"></div>';
   for (let d = 1; d <= giorniMese; d++) {{
     const dk = `${{calYear}}-${{pad2(calMonth + 1)}}-${{pad2(d)}}`;
     const n = ATTI_COUNTS[dk] || 0;
     let cls = 'cd';
-    if (calYear === oggiReale.getFullYear() && calMonth === oggiReale.getMonth() && d === oggiReale.getDate()) {{
-      cls += ' oggi';
-    }}
+    const isOggi = calYear === oggiReale.getFullYear() && calMonth === oggiReale.getMonth() && d === oggiReale.getDate();
+    const isSelected = selectedDay === dk;
+    if (isOggi && !isSelected) cls += ' oggi';
+    if (isSelected) cls += ' selected';
     if (n > 0) {{
       cls += ' ha-atti';
       html += `<div class="${{cls}}" data-dk="${{dk}}">${{d}}<span class="dot">${{n}}</span></div>`;
@@ -526,12 +606,22 @@ function renderCalendar() {{
 document.getElementById('cal-prev').addEventListener('click', () => {{
   calMonth--;
   if (calMonth < 0) {{ calMonth = 11; calYear--; }}
+  selectedDay = null;
+  document.getElementById('pannello').style.display = 'none';
   renderCalendar();
 }});
 document.getElementById('cal-next').addEventListener('click', () => {{
   calMonth++;
   if (calMonth > 11) {{ calMonth = 0; calYear++; }}
+  selectedDay = null;
+  document.getElementById('pannello').style.display = 'none';
   renderCalendar();
+}});
+
+document.querySelectorAll('.chip').forEach(ch => {{
+  const tn = ch.dataset.tipo;
+  const n = tn ? ALL_ATTI.filter(a => (a.tipoNorm||'').includes(tn)).length : ALL_ATTI.length;
+  ch.textContent = ch.textContent + ' · ' + n;
 }});
 
 renderCards();
