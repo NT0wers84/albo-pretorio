@@ -855,10 +855,16 @@ REGOLE OBBLIGATORIE:
         try:
             risposta = client.chat.completions.create(
                 model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"),
-                max_tokens=300,
+                # 200 parole in italiano superano spesso i 300 token (parole più
+                # lunghe/formali che in inglese): con max_tokens=300 la risposta
+                # veniva troncata a metà frase. Margine ampio per evitarlo.
+                max_tokens=500,
                 messages=[{"role": "user", "content": prompt}]
             )
             riassunto = risposta.choices[0].message.content.strip()
+            finish_reason = risposta.choices[0].finish_reason
+            if finish_reason == "length":
+                log.warning(f"  ⚠ Riassunto troncato per limite token (finish_reason=length)")
             log.info(f"  ✓ Riassunto generato ({len(riassunto)} char)")
             return riassunto
         except Exception as e:
