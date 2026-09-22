@@ -18,7 +18,7 @@ DOCS_DIR  = Path("docs")
 OUTPUT    = DOCS_DIR / "index.html"
 SITO_URL  = "https://nt0wers84.github.io/albo-pretorio/"
 FEED_URL  = SITO_URL + "feed.xml"
-NEWSLETTER_EMBED = "https://buttondown.com/api/emails/embed-subscribe/albo-pretorio-pe"
+TELEGRAM_URL = "https://t.me/albopretoriopieve"
 
 TIPO_CONFIG = {
     "delibera":            ("pill-acc", "ti-building-bank"),
@@ -303,23 +303,20 @@ footer{{
 }}
 footer a{{color:#555350;text-decoration:none}}
 footer a:hover{{text-decoration:underline}}
-.newsletter{{
+.telegram-cta{{
   margin:24px auto 20px;max-width:440px;text-align:center;
 }}
-.newsletter p{{
+.telegram-cta p{{
   font-size:12px;font-weight:600;color:#555;margin:0 0 10px;
   text-transform:uppercase;letter-spacing:.07em;
 }}
-.newsletter form{{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}}
-.newsletter input[type=email]{{
-  font-size:13px;padding:8px 12px;border:1px solid rgba(0,0,0,.15);
-  border-radius:8px;outline:none;font-family:inherit;flex:1;
-  min-width:160px;max-width:220px;
+.telegram-cta a{{
+  display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;
+  padding:9px 18px;background:var(--header);color:#fff!important;
+  border-radius:8px;text-decoration:none!important;font-family:inherit;
 }}
-.newsletter input[type=submit]{{
-  font-size:13px;font-weight:600;padding:8px 16px;background:var(--header);
-  color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;
-}}
+.telegram-cta a:hover{{opacity:.9}}
+.telegram-cta a i{{font-size:16px}}
 @media(max-width:640px){{
   header{{padding:36px 16px 32px}}
   header h1{{font-size:34px}}
@@ -391,12 +388,11 @@ footer a:hover{{text-decoration:underline}}
   <div style="margin:0 auto 14px;max-width:660px;line-height:1.75">
     <strong>Come funziona.</strong> Un automatismo legge ogni giorno l'Albo Pretorio del Comune di Pieve Emanuele, scarica gli atti e li riassume con l'intelligenza artificiale. L'estrazione automatica può contenere errori: fa fede sempre l'atto originale, linkato in ogni scheda.
   </div>
-  <div class="newsletter">
-    <p>Ricevi gli atti nella tua email</p>
-    <form action="{NEWSLETTER_EMBED}" method="post">
-      <input type="email" name="email" placeholder="la tua email" required>
-      <input type="submit" value="Iscriviti">
-    </form>
+  <div class="telegram-cta">
+    <p>Ricevi gli atti su Telegram</p>
+    <a href="{TELEGRAM_URL}" target="_blank" rel="noopener">
+      <i class="ti ti-brand-telegram"></i> Segui il canale
+    </a>
   </div>
   Dati: <a href="https://pieveemanuele.trasparenza-valutazione-merito.it/web/trasparenza" target="_blank" rel="noopener">Amministrazione Trasparente — Comune di Pieve Emanuele</a><br>
   · <a href="https://github.com/NT0wers84/albo-pretorio" target="_blank" rel="noopener">Codice su GitHub</a><br>

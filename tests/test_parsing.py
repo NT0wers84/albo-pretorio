@@ -67,4 +67,4 @@ def test_genera_sito():
     assert "Albo in chiaro" in html_out
     assert "Approvazione bilancio" in html_out
     assert "application/rss+xml" in html_out
-    assert "embed-subscribe/albo-pretorio-pe" in html_out
+    assert "t.me/albopretoriopieve" in html_out
