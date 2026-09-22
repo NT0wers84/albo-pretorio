@@ -21,7 +21,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 NUOVI_ATTI_JSON   = Path("data/nuovi_atti.json")
-BUTTONDOWN_API    = "https://api.buttondown.email/v1/emails"
+BUTTONDOWN_API    = "https://api.buttondown.com/v1/emails"
 SITO_URL          = "https://nt0wers84.github.io/albo-pretorio/"
 
 
