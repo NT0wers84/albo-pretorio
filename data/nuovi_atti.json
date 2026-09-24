@@ -1,17 +1,32 @@
 [
   {
-    "numero_raw": "2026/1892",
-    "numero": "1892",
+    "numero_raw": "2026/1900",
+    "numero": "1900",
     "anno": 2026,
-    "tipo": "ATTI AMMINISTRATIVI/DETERMINAZIONE NON CONTABILE",
+    "tipo": "ATTI AMMINISTRATIVI/DETERMINAZIONE CONTABILE",
     "tipo_norm": "determinazione",
-    "oggetto": "DIPENDENTE IDENTIFICATIVO 173334. AUTORIZZAZIONE ALL’APERTURA PARTITA IVA AI SENSI DELL'ART. 53, COMMA 6, DEL D.LGS. N. 165/2001 E DELL'ART. 53 COMMI 3 E 6 DEL CCNL 23/02/2026, FINALIZZATA ALLO SVOLGIMENTO DI ATTIVITA’ LIBERO PROFESSIONALE.",
-    "data_inizio": "2026-09-23",
-    "data_fine": "2026-10-08",
-    "url_dettaglio": "https://pieveemanuele.trasparenza-valutazione-merito.it/web/trasparenza/papca-ap/-/papca/display/5663001?p_auth=WQ61L4N6&p_p_state=pop_up",
-    "id_atto": "determinazione-1892-2026",
-    "riassunto": "Il Comune di Pieve Emanuele ha approvato la determinazione n. 1453 del 23/09/2026 che autorizza il dipendente con identificativo 173334, farmacista a tempo parziale (50 % – 18 ore settimanali), ad aprire una Partita IVA per esercitare l’attività di libero professionista. L’autorizzazione è concessa perché l’attività esterna non crea conflitti di interesse né pregiudica il servizio d’ufficio. Il dipendente dovrà svolgere la professione esclusivamente al di fuori dell’orario di lavoro e senza utilizzare beni, attrezzature o risorse del Comune. Inoltre, è tenuto a comunicare entro 15 giorni eventuali variazioni dell’attività o situazioni di possibile conflitto",
-    "n_allegati_totali": 2,
-    "data_elaborazione": "2026-09-23 18:45"
+    "oggetto": "AFFIDAMENTO DIRETTO PER ACQUISTO ATTIVITÀ SISTEMISTICA PER ATTIVAZIONE SERVIZIO PAGAMENTO BOLLO PAGO-PA PER GLI SPORTELLI DELL’ENTE ASSUNZIONE IMPEGNO DI SPESA AFFIDATO ALLA SOCIETÀ MAGGIOLI S.P.A. CIG BD0A560E2B",
+    "data_inizio": "2026-09-24",
+    "data_fine": "2026-10-09",
+    "url_dettaglio": "https://pieveemanuele.trasparenza-valutazione-merito.it/web/trasparenza/papca-ap/-/papca/display/5665123?p_auth=e9Jw4ru2&p_p_state=pop_up",
+    "id_atto": "determinazione-1900-2026",
+    "riassunto": "Il Comune di Pieve Emanuele ha deciso di affidare, con procedura di trattativa diretta, un acquisto di 4 ore di assistenza sistemistica specialistica per l’attivazione del servizio di pagamento del bollo telematico tramite Pago‑PA presso gli sportelli comunali. L’intervento, necessario a integrare il servizio già attivo e a consentire ai cittadini di pagare la marca da bollo online direttamente in sede, è stato affidato alla società **Maggioli S.p.A.** (CIG BD0A560E2B). L’impegno di spesa ammonta a **€ 292,80 comprensivi di IVA 22 %** e verrà addebitato sul capitolo 506/10 del Bilancio 2026. La procedura è stata eseguita sul portale MEPA (ordinativo nr. 9200590, procedura 1679605).  \n\nGli allegati tecnici (computi metrici, planimetrie, ecc.) sono consultabili sul sito del Comune.",
+    "n_allegati_totali": 5,
+    "data_elaborazione": "2026-09-24 18:46"
+  },
+  {
+    "numero_raw": "2026/1897",
+    "numero": "1897",
+    "anno": 2026,
+    "tipo": "ATTI AMMINISTRATIVI/DETERMINAZIONE CONTABILE",
+    "tipo_norm": "determinazione",
+    "oggetto": "ASSUNZIONE IMPEGNI DI SPESA PER ESIGENZE CORRELATE ALLA REALIZZAZIONE DELLA XXVII EDIZIONE FESTA COLORI, SAPORI E MUSICHE DELLA MAGNA GRECIA",
+    "data_inizio": "2026-09-24",
+    "data_fine": "2026-10-09",
+    "url_dettaglio": "https://pieveemanuele.trasparenza-valutazione-merito.it/web/trasparenza/papca-ap/-/papca/display/5663549?p_auth=e9Jw4ru2&p_p_state=pop_up",
+    "id_atto": "determinazione-1897-2026",
+    "riassunto": "Il Comune di Pieve Emanuele ha approvato gli impegni di spesa necessari per l’organizzazione della XXVII edizione della “Festa Colori, Sapori e Musiche della Magna Grecia”, che si svolgerà dal 24 al 27 settembre 2026.  \n\n- **Ge.Co di Rho Laura** (P.IVA 04302740131): impianto elettrico e certificazioni – € 3 660,00.  \n- **Antincendio Master s.a.s.** (P.IVA 02924060961): noleggio estintori – € 780,80.  \n- **Sebach S.p.A.** (",
+    "n_allegati_totali": 3,
+    "data_elaborazione": "2026-09-24 18:46"
   }
 ]
