@@ -6,6 +6,7 @@ Eseguito da GitHub Actions ogni giorno alle 15:00 UTC (cron 0 15 * * *)
 
 import os
 import re
+import gzip
 import json
 import time
 import logging
@@ -43,6 +44,15 @@ DATA_DIR       = Path("data")
 ALLEGATI_DIR   = DATA_DIR / "allegati"
 ATTI_JSON      = DATA_DIR / "atti.json"
 NUOVI_ATTI_JSON = DATA_DIR / "nuovi_atti.json"
+
+# Archivio permanente del testo estratto: gli atti restano pubblicati sul
+# portale solo 15 giorni, dopo di che il link scompare. Il testo letto qui
+# viene conservato per sempre (compresso, poche decine di KB per atto) così
+# resta verificabile anche quando il Comune ha già ritirato l'originale.
+# Il sito lo pubblica da docs/testi/, quindi si scrive già lì: nessuna copia
+# duplicata da tenere allineata.
+TESTI_DIR = Path("docs/testi")
+SOGLIA_TESTO_ARCHIVIO = 300  # sotto questa soglia il testo non vale la pena archiviarlo
 
 # Limite allegati per atto
 MAX_ALLEGATI = 10
@@ -501,7 +511,30 @@ def elabora_atto(atto: dict) -> dict:
             testi_pdf.append(testo_inline)
 
     atto["testo_combinato"] = "\n\n---\n\n".join(testi_pdf)
+    _salva_testo_archiviato(atto.get("id_atto", ""), atto["testo_combinato"])
     return atto
+
+
+def _salva_testo_archiviato(id_atto: str, testo: str) -> None:
+    """
+    Conserva il testo integrale dell'atto in docs/testi/<id_atto>.txt.gz,
+    compresso e committato nel repository — l'unica copia che resta
+    consultabile una volta che l'atto è uscito dai 15 giorni di pubblicazione
+    sul portale. Scrittura idempotente: se il file esiste già non lo riscrive
+    (evita di intasare i commit git con contenuto identico ogni run).
+    """
+    if not id_atto or not testo or len(testo.strip()) < SOGLIA_TESTO_ARCHIVIO:
+        return
+    percorso = TESTI_DIR / f"{id_atto}.txt.gz"
+    if percorso.exists():
+        return
+    try:
+        TESTI_DIR.mkdir(parents=True, exist_ok=True)
+        with gzip.open(percorso, "wt", encoding="utf-8") as f:
+            f.write(testo)
+        log.info(f"  → Testo archiviato: {percorso.name} ({len(testo)} char)")
+    except Exception as e:
+        log.warning(f"  Testo archiviato non scrivibile ({percorso.name}): {e}")
 
 
 def _estrai_testo_inline_html(soup: BeautifulSoup) -> str:

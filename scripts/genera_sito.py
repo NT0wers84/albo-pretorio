@@ -16,6 +16,7 @@ from collections import defaultdict
 ATTI_JSON = Path("data/atti.json")
 DOCS_DIR  = Path("docs")
 OUTPUT    = DOCS_DIR / "index.html"
+TESTI_DIR = DOCS_DIR / "testi"
 SITO_URL  = "https://nt0wers84.github.io/albo-pretorio/"
 FEED_URL  = SITO_URL + "feed.xml"
 TELEGRAM_URL = "https://t.me/albopretoriopieve"
@@ -55,7 +56,8 @@ def fmt_data(iso: str) -> str:
     return f"{d}/{m}/{y}"
 
 
-def atto_to_js(a: dict, idx: int) -> dict:
+def atto_to_js(a: dict, idx: int, testi_disponibili: set) -> dict:
+    id_atto = a.get("id_atto", "")
     return {
         "idx": idx,
         "tipo": tipo_breve(a.get("tipo", "Atto")),
@@ -66,6 +68,8 @@ def atto_to_js(a: dict, idx: int) -> dict:
         "oggetto": (a.get("oggetto") or "")[:200],
         "riassunto": a.get("riassunto") or "",
         "url": a.get("url_dettaglio") or "",
+        "id": id_atto,
+        "testoArchiviato": id_atto in testi_disponibili,
     }
 
 
@@ -86,7 +90,13 @@ def genera_html(atti: list[dict]) -> str:
             per_data[d].append(a)
 
     atti_counts = {k: len(v) for k, v in per_data.items()}
-    all_atti_js = json.dumps([atto_to_js(a, i) for i, a in enumerate(atti)], ensure_ascii=False)
+
+    # Testi archiviati (docs/testi/<id>.txt.gz): l'atto sparisce dal portale
+    # dopo 15 giorni di pubblicazione, il testo salvato al momento della
+    # lettura resta l'unica copia consultabile dopo.
+    testi_disponibili = {p.stem.removesuffix(".txt") for p in TESTI_DIR.glob("*.txt.gz")} if TESTI_DIR.exists() else set()
+
+    all_atti_js = json.dumps([atto_to_js(a, i, testi_disponibili) for i, a in enumerate(atti)], ensure_ascii=False)
     atti_counts_js = json.dumps(atti_counts, ensure_ascii=False)
 
     # Il calendario è renderizzato interamente lato client (JS) per permettere
@@ -288,6 +298,19 @@ main{{max-width:920px;margin:0 auto;padding:38px 20px 80px}}
 }}
 #rias-ogg{{font-size:15px;font-weight:700;line-height:1.4;margin-bottom:14px}}
 #rias-txt{{font-size:13.5px;line-height:1.85;color:#444;margin-bottom:20px}}
+#testo-arch{{display:none;margin-bottom:20px}}
+#testo-arch.available{{display:block}}
+#testo-arch-btn{{
+  display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
+  color:var(--acc);background:var(--acc-bg);border:1px solid var(--acc-border);
+  border-radius:8px;padding:7px 14px;cursor:pointer;font-family:inherit;
+}}
+#testo-arch-btn:hover{{opacity:.85}}
+#testo-arch-body{{
+  white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.75;
+  color:#444;background:var(--panel-bg);border:1px solid var(--border-soft);
+  border-radius:10px;padding:14px 16px;margin-top:10px;max-height:320px;overflow-y:auto;
+}}
 #rias-ft{{
   font-size:11px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:14px;
   display:flex;justify-content:space-between;align-items:center;
@@ -406,6 +429,10 @@ footer a:hover{{text-decoration:underline}}
     <div id="rias-chip"></div>
     <p id="rias-ogg"></p>
     <p id="rias-txt"></p>
+    <div id="testo-arch">
+      <button id="testo-arch-btn" type="button"><i class="ti ti-file-text"></i> Testo integrale dell'atto</button>
+      <pre id="testo-arch-body" hidden></pre>
+    </div>
     <div id="rias-ft">
       <span id="rias-dt"></span>
       <a id="rias-lnk" href="#" target="_blank" rel="noopener">Leggi atto completo &#x2192;</a>
@@ -528,8 +555,48 @@ function openModal(idx) {{
   document.getElementById('rias-txt').textContent = a.riassunto || '';
   document.getElementById('rias-dt').textContent = (a.data||'') + ' · ' + (a.numero||'');
   document.getElementById('rias-lnk').href = a.url || '#';
+
+  const box = document.getElementById('testo-arch');
+  const body = document.getElementById('testo-arch-body');
+  const btn = document.getElementById('testo-arch-btn');
+  body.hidden = true;
+  body.textContent = '';
+  btn.innerHTML = '<i class="ti ti-file-text"></i> Testo integrale dell\\'atto';
+  box.classList.toggle('available', !!a.testoArchiviato);
+  btn.onclick = () => caricaTestoArchiviato(a.id, btn, body);
+
   document.getElementById('rias-ov').classList.add('open');
   document.body.style.overflow = 'hidden';
+}}
+
+async function caricaTestoArchiviato(id, btn, body) {{
+  if (!body.hidden) {{
+    body.hidden = true;
+    btn.innerHTML = '<i class="ti ti-file-text"></i> Testo integrale dell\\'atto';
+    return;
+  }}
+  if (body.textContent) {{
+    body.hidden = false;
+    btn.innerHTML = '<i class="ti ti-file-text"></i> Nascondi testo integrale';
+    return;
+  }}
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader-2"></i> Carico…';
+  try {{
+    const resp = await fetch(`testi/${{id}}.txt.gz`);
+    if (!resp.ok) throw new Error('non trovato');
+    const stream = resp.body.pipeThrough(new DecompressionStream('gzip'));
+    const testo = await new Response(stream).text();
+    body.textContent = testo;
+    body.hidden = false;
+    btn.innerHTML = '<i class="ti ti-file-text"></i> Nascondi testo integrale';
+  }} catch (e) {{
+    body.textContent = 'Testo non disponibile per questo atto.';
+    body.hidden = false;
+    btn.innerHTML = '<i class="ti ti-file-text"></i> Testo integrale dell\\'atto';
+  }} finally {{
+    btn.disabled = false;
+  }}
 }}
 
 function closeModal() {{
