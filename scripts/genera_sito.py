@@ -420,7 +420,7 @@ footer a:hover{{text-decoration:underline}}
   Dati: <a href="https://pieveemanuele.trasparenza-valutazione-merito.it/web/trasparenza" target="_blank" rel="noopener">Amministrazione Trasparente — Comune di Pieve Emanuele</a><br>
   · <a href="https://github.com/NT0wers84/albo-pretorio" target="_blank" rel="noopener">Codice su GitHub</a><br>
   · <a href="{FEED_URL}">Feed RSS</a><br>
-  · Progetto gemello: <a href="https://nt0wers84.github.io/bilanciopertutti/" target="_blank" rel="noopener">OpenSpese Pieve Emanuele</a>
+  · Progetto gemello: <a href="https://nt0wers84.github.io/bilanciopertutti/" target="_blank" rel="noopener">Conti in chiaro</a>
 </footer>
 
 <div id="rias-ov">
